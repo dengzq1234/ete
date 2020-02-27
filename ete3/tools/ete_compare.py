@@ -184,6 +184,8 @@ def run(args):
             else:
                 data = [shorten_str(stree_name, 15, reverse=True),
                         shorten_str(rtree_name, 15, reverse=True),
+                        #stree_name,
+                        #rtree_name,
                         r['effective_tree_size'],
                         r['norm_rf'],
                         r['rf'], r['max_rf'],
@@ -191,7 +193,7 @@ def run(args):
                         r["ref_edges_in_source"],
                         r['source_subtrees'],
                         r['treeko_dist']]
-
+                #print(stree_name,shorten_str(stree_name, 15, reverse=True))    
                 if r['effective_tree_size'] == 0:
                     for i in range(3, len(data)):
                         data[i] = -1
@@ -201,6 +203,7 @@ def run(args):
                 else:
                     print_table([list(map(as_str, data))],
                                 fix_col_width = col_sizes, wrap_style='cut')
+                    
 
 
 def euc_dist(v1, v2):

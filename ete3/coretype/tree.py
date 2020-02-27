@@ -48,6 +48,8 @@ from functools import cmp_to_key
 
 import six
 from six.moves import (cPickle, map, range, zip)
+import numpy as np
+import pandas as pd
 
 from ..parser.newick import read_newick, write_newick
 from .. import utils
@@ -1667,6 +1669,7 @@ class TreeNode(object):
 
         attrs_t1 = set([getattr(n, attr_t1) for n in ref_t.iter_leaves() if hasattr(n, attr_t1)])
         attrs_t2 = set([getattr(n, attr_t2) for n in target_t.iter_leaves() if hasattr(n, attr_t2)])
+        
         common_attrs = attrs_t1 & attrs_t2
         # release mem
         attrs_t1, attrs_t2 = None, None
@@ -1674,11 +1677,12 @@ class TreeNode(object):
         # Check for duplicated items (is it necessary? can we optimize? what's the impact in performance?')
         size1 = len([True for n in ref_t.iter_leaves() if getattr(n, attr_t1, None) in common_attrs])
         size2 = len([True for n in target_t.iter_leaves() if getattr(n, attr_t2, None) in common_attrs])
+ 
         if size1 > len(common_attrs):
             raise TreeError('Duplicated items found in source tree')
         if size2 > len(common_attrs):
             raise TreeError('Duplicated items found in reference tree')
-
+        
         if expand_polytomies:
             ref_trees = [Tree(nw) for nw in
                          ref_t.expand_polytomies(map_attr=attr_t1,
@@ -1946,6 +1950,45 @@ class TreeNode(object):
             result["ref_edges"] = valid_ref_edges
         return result
 
+    def diff(self, t2, output='topology', attr_t1='name', attr_t2='name', color=True): #experimental
+        """
+        compare this tree with another using robinson foulds symmetric difference
+        and number of shared edges. Trees of different sizes and with duplicated
+        items allowed.
+
+        returns: a Python dictionary with results
+        """
+        results = {}
+        
+        from ..tools import ete_diff
+        
+        difftable = ete_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2) # dataframe, each row is a diff information [dist, b_dist, side1, side2, diff_leaves, n1(as Tree node), n2(as Tree node) ]
+        
+        print("#"*20)
+        showtable_topo = ete_diff.show_difftable_topo(difftable, attr_t1, attr_t2, usecolor=color)
+        
+        print("#"*20)
+        rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)
+        showtable_summary = ete_diff.show_difftable_summary(difftable, rf, rf_max) #ziqi only need rf maxrf?
+        print("#"*20)
+        showtable_table = ete_diff.show_difftable(difftable)
+        print("#"*20)
+        showtable_tab = ete_diff.show_difftable_tab(difftable)
+
+        df_difftable = pd.DataFrame(np.array(difftable))
+        df_difftable_topo = pd.DataFrame(np.array(showtable_topo))
+        df_difftable_summary = pd.DataFrame(np.array(showtable_summary))
+        df_difftable_table = pd.DataFrame(np.array(showtable_table))
+        df_difftable_tab = pd.DataFrame(np.array(showtable_tab))
+
+        results['difftable'] = df_difftable
+        results['difftable_topo'] = df_difftable_topo
+        results['difftable_summary'] = df_difftable_summary
+        results['difftable_table'] = df_difftable_table
+        results['difftable_tabs'] = df_difftable_tab
+
+        return results
+
     def _diff(self, t2, output='topology', attr_t1='name', attr_t2='name', color=True):
         """
         .. versionadded:: 2.3
@@ -1959,15 +2002,20 @@ class TreeNode(object):
         difftable = ete_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2)
         if output == "topology":
             ete_diff.show_difftable_topo(difftable, attr_t1, attr_t2, usecolor=color)
+        
         elif output == "diffs":
             ete_diff.show_difftable(difftable)
+        
         elif output == "diffs_tab":
             ete_diff.show_difftable_tab(difftable)
+        
         elif output == 'table':
-            rf, rf_max, _, _, _, _, _ = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)[:2]
-            ete_diff.show_difftable_summary(difftable, rf, rf_max)
+            rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)
+            #rf, rf_max = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)[:2]
+            ete_diff.show_difftable_summary(difftable, rf, rf_max) #ziqi
         else:
             return difftable
+
 
     def iter_edges(self, cached_content = None):
         '''
