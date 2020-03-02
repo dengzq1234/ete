@@ -1958,9 +1958,9 @@ class TreeNode(object):
 
         returns: a Python dictionary with results
         """
-        results = {}
-        
         from ..tools import ete_diff
+
+        results = {}
         
         difftable = ete_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2) # dataframe, each row is a diff information [dist, b_dist, side1, side2, diff_leaves, n1(as Tree node), n2(as Tree node) ]
         
