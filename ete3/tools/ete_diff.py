@@ -264,16 +264,14 @@ def show_difftable_summary(difftable, rf=-1, rf_max=-1, branchdist=False):
         
     if branchdist:
         log.info("\n"+"\t".join(["Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
-        print("\n"+"\t".join(["Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
-        print("%0.6f\t%0.6f\t%10d\t%d\t%d" %(total_dist,total_bdist, len(difftable), rf, rf_max))
-
+        #print("\n"+"\t".join(["Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
+        #print("%0.6f\t%0.6f\t%10d\t%d\t%d" %(total_dist,total_bdist, len(difftable), rf, rf_max))
         showtable.append([total_dist,total_bdist, len(difftable), rf, rf_max])
 
     else:
         log.info("\n"+"\t".join(["Dist", "Mismatches", "RF", "maxRF"]))
-        print("\n"+"\t".join(["Dist", "Mismatches", "RF", "maxRF"]))
-        print("%0.6f\t%10d\t%d\t%d" %(total_dist, len(difftable), rf, rf_max))
-
+        #print("\n"+"\t".join(["Dist", "Mismatches", "RF", "maxRF"]))
+        #print("%0.6f\t%10d\t%d\t%d" %(total_dist, len(difftable), rf, rf_max))
         showtable.append([total_dist, len(difftable), rf, rf_max])
 
     return showtable
@@ -284,14 +282,14 @@ def show_difftable(difftable, branchdist=False):
     if branchdist:
         for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
             showtable.append([dist, b_dist, len(side1), len(side2), len(diff), sepstring(diff)])
-        print_table(showtable, header=["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "Diff"],
-                    max_col_width=80, wrap_style="wrap", row_line=True)
+        # print_table(showtable, header=["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "Diff"],
+        #             max_col_width=80, wrap_style="wrap", row_line=True)
         
     else:
         for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
             showtable.append([dist, len(side1), len(side2), len(diff), sepstring(diff)])
-        print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "Diff"],
-                    max_col_width=80, wrap_style="wrap", row_line=True)
+        # print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "Diff"],
+        #             max_col_width=80, wrap_style="wrap", row_line=True)
     return showtable
 
 def show_difftable_tab(difftable, branchdist=False):
@@ -302,15 +300,15 @@ def show_difftable_tab(difftable, branchdist=False):
             showtable.append([dist, b_dist, len(side1), len(side2), len(diff),
                               sepstring(side1, "|"), sepstring(side2, "|"),
                               sepstring(diff, "|")])
-        print('#' + '\t'.join(["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
+        #print('#' + '\t'.join(["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
     else:
         for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
             showtable.append([dist, len(side1), len(side2), len(diff),
                               sepstring(side1, "|"), sepstring(side2, "|"),
                               sepstring(diff, "|")])
-        print('#' + '\t'.join(["Dist", "Size1", "Size2", "ndiffs",  "refTree", "targetTree", "Diff" ])) 
+        #print('#' + '\t'.join(["Dist", "Size1", "Size2", "ndiffs",  "refTree", "targetTree", "Diff" ])) 
         
-    print('\n'.join(['\t'.join(map(str, items)) for items in showtable]))
+    #print('\n'.join(['\t'.join(map(str, items)) for items in showtable]))
     return showtable
 
 def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=False):
@@ -360,12 +358,12 @@ def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=Fals
         else:
             showtable.append([dist, "%d/%d (%d)" %(len(side1), len(side2),len(diff)), topo1, topo2])
     
-    if branchdist:
-        print_table(showtable, header=["Dist", "Branch Dist", "#Diffs", "Tree1", "Tree2"],
-                    max_col_width=maxcolwidth, wrap_style="wrap", row_line=True) 
-    else:
-        print_table(showtable, header=["Dist", "#Diffs", "Tree1", "Tree2"],
-                    max_col_width=maxcolwidth, wrap_style="wrap", row_line=True)    
+    # if branchdist:
+    #     print_table(showtable, header=["Dist", "Branch Dist", "#Diffs", "Tree1", "Tree2"],
+    #                 max_col_width=maxcolwidth, wrap_style="wrap", row_line=True) 
+    # else:
+    #     print_table(showtable, header=["Dist", "#Diffs", "Tree1", "Tree2"],
+    #                 max_col_width=maxcolwidth, wrap_style="wrap", row_line=True)    
         
     log.info("Total euclidean distance:\t%0.4f\tMismatching nodes:\t%d" %(total_dist, len(difftable)))
 
@@ -490,14 +488,44 @@ def run(args):
 
                 if len(difftable) != 0:
                     if args.report == "topology":
-                        show_difftable_topo(difftable, rattr, tattr, usecolor=args.color,branchdist=branchdist)
+                        display_result = show_difftable_topo(difftable, rattr, tattr, usecolor=args.color,branchdist=branchdist)
+                        if branchdist:
+                            print_table(display_result, header=["Dist", "Branch Dist", "#Diffs", "Tree1", "Tree2"],
+                                        max_col_width=80, wrap_style="wrap", row_line=True) 
+                        else:
+                            print_table(display_result, header=["Dist", "#Diffs", "Tree1", "Tree2"],
+                                        max_col_width=80, wrap_style="wrap", row_line=True) 
+
                     elif args.report == "diffs":
-                        show_difftable(difftable, branchdist=branchdist)
+                        display_result = show_difftable(difftable, branchdist=branchdist)
+                        if branchdist:
+                            print_table(display_result, header=["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "Diff"], 
+                            max_col_width=80, wrap_style="wrap", row_line=True)
+                        else:
+                            print_table(display_result, header=["Dist", "Size1", "Size2", "ndiffs", "Diff"],
+                            max_col_width=80, wrap_style="wrap", row_line=True)
+
                     elif args.report == "diffs_tab":
-                        show_difftable_tab(difftable, branchdist=branchdist)
+                        display_result = show_difftable_tab(difftable, branchdist=branchdist)
+                        if branchdist:
+                            print('#' + '\t'.join(["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
+                        else:
+                            print('#' + '\t'.join(["Dist", "Size1", "Size2", "ndiffs",  "refTree", "targetTree", "Diff" ])) 
+                        print('\n'.join(['\t'.join(map(str, items)) for items in display_result]))
+
                     elif args.report == 'table':
                         rf, rf_max, _, _, _, _, _ = t1.robinson_foulds(t2, attr_t1=rattr, attr_t2=tattr)
-                        show_difftable_summary(difftable, rf, rf_max, branchdist=branchdist)
+                        display_results = show_difftable_summary(difftable, rf, rf_max, branchdist=branchdist)
+                        for display_result in display_results:
+                            if branchdist:
+                                print("\n"+"\t".join(["Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
+                                print("%0.6f\t%0.6f\t%10d\t%d\t%d" %(display_result[0],display_result[1], display_result[2], display_result[3], display_result[4]))
+
+                            else:
+                                print("\n"+"\t".join(["Dist", "Mismatches", "RF", "maxRF"]))
+                                print("%0.6f\t%10d\t%d\t%d" %(display_result[0],display_result[1], display_result[2], display_result[3]))
+
+
                 else:
                     log.info("Difference between (Reference) %s and (Target) %s returned no results" % (rtree, ttree))
 

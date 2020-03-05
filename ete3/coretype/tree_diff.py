@@ -149,12 +149,15 @@ def treediff(t1, t2, attr1, attr2, dist_fn=EUCL_DIST, reduce_matrix=False,branch
     matrix = [[pool.apply_async(dist_fn,args=((n1,x),(n2,y))) for n2,y in parts2] for n1,x in parts1] 
     pool.close()
     
-    # Where output the calculation bar.........
-    with tqdm(total=len(matrix[0])*len(matrix)) as pbar:
-        for i in range(len(matrix)):
+    # Where output the calculation bar......... Ziqi
+    for i in range(len(matrix)):
             for j in range(len(matrix[0])):
                 matrix[i][j] = matrix[i][j].get()
-                pbar.update(1)
+    # with tqdm(total=len(matrix[0])*len(matrix)) as pbar:
+    #     for i in range(len(matrix)):
+    #         for j in range(len(matrix[0])):
+    #             matrix[i][j] = matrix[i][j].get()
+    #             pbar.update(1)
     
     # Reduce matrix to avoid useless comparisons
     if reduce_matrix:
