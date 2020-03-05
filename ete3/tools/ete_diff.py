@@ -55,11 +55,12 @@ import logging
 from tqdm import tqdm
 log = logging.Logger("main")
 
+from ..coretype.tree_diff import treediff, EUCL_DIST, EUCL_DIST_B, RF_DIST, get_distances1, get_distances2
 
 
 DESC = ""
 
-
+"""
 def EUCL_DIST(a,b):  
     return 1 - (float(len(a[1] & b[1])) / max(len(a[1]), len(b[1])))
 
@@ -159,6 +160,7 @@ def get_distances2(t1,t2):
     
     return LA.norm(ccm1-ccm2)
 
+"""
 
 def sepstring(items, sep=", "):
     return sep.join(sorted(map(str, items)))
@@ -166,7 +168,7 @@ def sepstring(items, sep=", "):
 
 
 ### Treediff ###
-
+"""
 def treediff(t1, t2, attr1, attr2, dist_fn=EUCL_DIST, reduce_matrix=False,branchdist=None, jobs=1):
     log = logging.getLogger()
     log.info("Computing distance matrix...")
@@ -246,7 +248,7 @@ def treediff(t1, t2, attr1, attr2, dist_fn=EUCL_DIST, reduce_matrix=False,branch
             difftable.append([dist, b_dist, side1, side2, diff, n1, n2])
 
     return difftable
-
+"""
 
 
 ### REPORTS ###
@@ -339,9 +341,6 @@ def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=Fals
         topo1 = n1.get_ascii(show_internal=False, compact=False)
         topo2 = n2.get_ascii(show_internal=False, compact=False)
 
-        print(dist)
-        print(n1)
-        print(n2)
         # This truncates too large topology strings pretending to be
         # scrolled to the right margin
         topo1_lines = topo1.split("\n")
@@ -369,6 +368,7 @@ def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=Fals
                     max_col_width=maxcolwidth, wrap_style="wrap", row_line=True)    
         
     log.info("Total euclidean distance:\t%0.4f\tMismatching nodes:\t%d" %(total_dist, len(difftable)))
+
     return showtable #ziqi
 
 def populate_args(diff_args_p):
@@ -395,7 +395,7 @@ def populate_args(diff_args_p):
                         help="Do not show process information")
     
     diff_args.add_argument("--report", dest="report",
-                        choices=["topology", "diffs", "diffs_tab", "summary","table"],
+                        choices=["topology", "diffs", "diffs_tab","table"], #remove summary because it's part of the table
                         default = "topology",
                         help="Different format for the comparison results")
 
@@ -485,6 +485,7 @@ def run(args):
                 else:
                     branchdist = None
 
+                
                 difftable = treediff(t1, t2, rattr, tattr, dist_fn, args.fullsearch, branchdist=branchdist,jobs=maxjobs)
 
                 if len(difftable) != 0:

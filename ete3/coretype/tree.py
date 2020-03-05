@@ -49,7 +49,6 @@ from functools import cmp_to_key
 import six
 from six.moves import (cPickle, map, range, zip)
 import numpy as np
-import pandas as pd
 
 from ..parser.newick import read_newick, write_newick
 from .. import utils
@@ -1950,7 +1949,7 @@ class TreeNode(object):
             result["ref_edges"] = valid_ref_edges
         return result
 
-    def diff(self, t2, output='topology', attr_t1='name', attr_t2='name', color=True): #experimental
+    def diff(self, t2, output='difftable', attr_t1='name', attr_t2='name', branchdist=None, distance=None, color=True): #experimental
         """
         compare this tree with another using robinson foulds symmetric difference
         and number of shared edges. Trees of different sizes and with duplicated
@@ -1959,33 +1958,52 @@ class TreeNode(object):
         returns: a Python dictionary with results
         """
         from ..tools import ete_diff
-
+        from . import tree_diff
         results = {}
         
-        difftable = ete_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2) # dataframe, each row is a diff information [dist, b_dist, side1, side2, diff_leaves, n1(as Tree node), n2(as Tree node) ]
+        # set argument distance as --distance {e,rf,eb} as command line, EUCL_DIST as default 
+        dist_fn = tree_diff.EUCL_DIST # as default
+        if distance == 'e':
+            dist_fn = tree_diff.EUCL_DIST
+        elif distance == 'rf':
+            dist_fn = tree_diff.RF_DIST
+        elif distance == 'eb':
+            dist_fn = tree_diff.EUCL_DIST_B
+
+        # set argument branchdist as --branch-distance {None,get_distances1,get_distances2}, None as default
+        if branchdist == "get_distances1":
+            branchdist = tree_diff.get_distances1
+        elif branchdist == "get_distances2":
+            branchdist = tree_diff.get_distances2
+        else:
+            branchdist = None # as default
+
+        #difftable = ete_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2) # dataframe, each row is a diff information [dist, b_dist, side1, side2, diff_leaves, n1(as Tree node), n2(as Tree node) ]
         
-        print("#"*20)
-        showtable_topo = ete_diff.show_difftable_topo(difftable, attr_t1, attr_t2, usecolor=color)
-        
-        print("#"*20)
+        difftable = tree_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2, dist_fn=dist_fn, branchdist=branchdist)
         rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)
-        showtable_summary = ete_diff.show_difftable_summary(difftable, rf, rf_max) #ziqi only need rf maxrf?
-        print("#"*20)
-        showtable_table = ete_diff.show_difftable(difftable)
-        print("#"*20)
-        showtable_tab = ete_diff.show_difftable_tab(difftable)
+        showtable_summary = ete_diff.show_difftable_summary(difftable, rf, rf_max, branchdist=branchdist) 
 
-        df_difftable = pd.DataFrame(np.array(difftable))
-        df_difftable_topo = pd.DataFrame(np.array(showtable_topo))
-        df_difftable_summary = pd.DataFrame(np.array(showtable_summary))
-        df_difftable_table = pd.DataFrame(np.array(showtable_table))
-        df_difftable_tab = pd.DataFrame(np.array(showtable_tab))
+        #default
+        results['total_dist'] = showtable_summary[0][0] # summary columns ["Dist", "*Branch Dist", "Mismatches", "RF"， "MaxRF"]
+        if branchdist:
+            results['branch_dist'] = showtable_summary[0][1]
+        results['mismatches'] = showtable_summary[0][-3]
+        results['rf'] = showtable_summary[0][-2]
+        results['max_rf'] = showtable_summary[0][-1]
 
-        results['difftable'] = df_difftable
-        results['difftable_topo'] = df_difftable_topo
-        results['difftable_summary'] = df_difftable_summary
-        results['difftable_table'] = df_difftable_table
-        results['difftable_tabs'] = df_difftable_tab
+        # optional
+        if output == 'difftable':
+            results['difftable'] = difftable
+        elif output == 'topology':
+            showtable_topo = ete_diff.show_difftable_topo(difftable, attr_t1, attr_t2, usecolor=color, branchdist=branchdist)
+            results['topo'] = showtable_topo
+        elif output == 'tabs': 
+            showtable_tab = ete_diff.show_difftable_tab(difftable, branchdist=branchdist)
+            results['tabs'] = showtable_tab
+        elif output == 'table': 
+            showtable_table = ete_diff.show_difftable(difftable, branchdist=branchdist)
+            results['table'] = showtable_table
 
         return results
 
