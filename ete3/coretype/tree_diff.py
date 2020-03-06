@@ -135,7 +135,7 @@ def treediff(t1, t2, attr1, attr2, dist_fn=EUCL_DIST, reduce_matrix=False,branch
 
     t1_cached_content = t1.get_cached_content(store_attr=attr1)
     t2_cached_content = t2.get_cached_content(store_attr=attr2)
-
+    
     #parts1 = [(k, v) for k, v in t1_cached_content.items() if k.children]
     #parts2 = [(k, v) for k, v in t2_cached_content.items() if k.children]
 
@@ -208,6 +208,8 @@ def treediff(t1, t2, attr1, attr2, dist_fn=EUCL_DIST, reduce_matrix=False,branch
                                                 parts1[r][1], parts2[c][1],
                                                 parts1[r][1].symmetric_difference(parts2[c][1]),
                                                 parts1[r][0], parts2[c][0])
+            
+            n1 = Tree(n1.write(features=[attr1]))  #in order to gain the names of internal nodes
+            n2 = Tree(n2.write(features=[attr2])) 
             difftable.append([dist, b_dist, side1, side2, diff, n1, n2])
-
     return difftable

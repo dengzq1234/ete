@@ -264,7 +264,8 @@ def show_difftable_summary(difftable, rf=-1, rf_max=-1, branchdist=False):
         total_dist += dist
         total_bdist += b_dist
     
-    avg_dist = total_dist/len(difftable)
+    if len(difftable) > 0:
+        avg_dist = total_dist/len(difftable)
 
     if branchdist:
         log.info("\n"+"\t".join(["Average Dist", "Total Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
@@ -280,41 +281,6 @@ def show_difftable_summary(difftable, rf=-1, rf_max=-1, branchdist=False):
 
     return showtable
 
-def show_difftable(difftable, branchdist=False):
-    showtable = []
-    
-    if branchdist:
-        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
-            showtable.append([dist, b_dist, len(side1), len(side2), len(diff), sepstring(diff)])
-        # print_table(showtable, header=["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "Diff"],
-        #             max_col_width=80, wrap_style="wrap", row_line=True)
-        
-    else:
-        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
-            showtable.append([dist, len(side1), len(side2), len(diff), sepstring(diff)])
-        # print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "Diff"],
-        #             max_col_width=80, wrap_style="wrap", row_line=True)
-    return showtable
-
-def show_difftable_tab(difftable, branchdist=False):
-    showtable = []
-    
-    if branchdist:
-        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
-            showtable.append([dist, b_dist, len(side1), len(side2), len(diff),
-                              sepstring(side1, "|"), sepstring(side2, "|"),
-                              sepstring(diff, "|")])
-        #print('#' + '\t'.join(["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
-    else:
-        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
-            showtable.append([dist, len(side1), len(side2), len(diff),
-                              sepstring(side1, "|"), sepstring(side2, "|"),
-                              sepstring(diff, "|")])
-        #print('#' + '\t'.join(["Dist", "Size1", "Size2", "ndiffs",  "refTree", "targetTree", "Diff" ])) 
-        
-    #print('\n'.join(['\t'.join(map(str, items)) for items in showtable]))
-    return showtable
-
 def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=False):
     if not difftable:
         return
@@ -323,8 +289,8 @@ def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=Fals
     total_dist = 0
     for dist, b_dist, side1, side2, diff, n1, n2 in sorted(difftable, reverse=True):
         total_dist += dist
-        n1 = Tree(n1.write(features=[attr1]))
-        n2 = Tree(n2.write(features=[attr2]))
+        #n1 = Tree(n1.write(features=[attr1]))
+        #n2 = Tree(n2.write(features=[attr2]))
         n1.ladderize()
         n2.ladderize()
         for leaf in n1.iter_leaves():
@@ -340,8 +306,8 @@ def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=Fals
                 if usecolor:
                     leaf.name = color(leaf.name, "red")
 
-        topo1 = n1.get_ascii(show_internal=False, compact=False)
-        topo2 = n2.get_ascii(show_internal=False, compact=False)
+        topo1 = n1.get_ascii(show_internal=True, compact=False)
+        topo2 = n2.get_ascii(show_internal=True, compact=False)
 
         # This truncates too large topology strings pretending to be
         # scrolled to the right margin
@@ -372,6 +338,62 @@ def show_difftable_topo(difftable, attr1, attr2, usecolor=False, branchdist=Fals
     log.info("Total euclidean distance:\t%0.4f\tMismatching nodes:\t%d" %(total_dist, len(difftable)))
 
     return showtable #ziqi
+
+def show_difftable(difftable, branchdist=False):
+    showtable = []
+    if branchdist:
+        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
+            if n1.name == '':
+                n1.name = 'Null'
+            if n2.name == '':
+                n2.name = 'Null'
+            # header: ["Dist", "Branch Dist", "Internal1", "Internal2", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]    
+            showtable.append([dist, b_dist, n1.name, n2.name, len(side1), len(side2), len(diff), sepstring(diff)])
+        # print_table(showtable, header=["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "Diff"],
+        #             max_col_width=80, wrap_style="wrap", row_line=True)
+        
+    else:
+        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
+            if n1.name == '':
+                n1.name = 'Null'
+            if n2.name == '':
+                n2.name = 'Null'
+
+            showtable.append([dist, n1.name, n2.name, len(side1), len(side2), len(diff), sepstring(diff)])
+        # print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "Diff"],
+        #             max_col_width=80, wrap_style="wrap", row_line=True)
+    return showtable
+
+def show_difftable_tab(difftable, branchdist=False):
+    showtable = []
+    
+    if branchdist:
+        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
+            if n1.name == '':
+                n1.name = 'Null'
+            if n2.name == '':
+                n2.name = 'Null'
+
+            # header: ["Dist", "Branch Dist", "Internal1", "Internal2", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]
+            showtable.append([dist, b_dist, n1.name, n2.name, len(side1), len(side2), len(diff),
+                            sepstring(side1, "|"), sepstring(side2, "|"),
+                            sepstring(diff, "|")])
+        #print('#' + '\t'.join(["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
+    else:
+        for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
+            if n1.name == '':
+                n1.name = 'Null'
+            if n2.name == '':
+                n2.name = 'Null'
+                
+            # header: ["Dist", "Internal1", "Internal2", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]
+            showtable.append([dist, n1.name, n2.name, len(side1), len(side2), len(diff),
+                            sepstring(side1, "|"), sepstring(side2, "|"),
+                            sepstring(diff, "|")])
+
+        
+    #print('\n'.join(['\t'.join(map(str, items)) for items in showtable]))
+    return showtable
 
 def populate_args(diff_args_p):
 
@@ -441,7 +463,7 @@ def run(args):
     else:
  
         for rtree in args.ref_trees:
-        
+            
             t1 = Tree(rtree,format=args.ref_newick_format)
             
             for ttree in args.src_trees:
