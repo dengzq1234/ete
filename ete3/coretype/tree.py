@@ -2030,7 +2030,7 @@ class TreeNode(object):
         elif output == 'table':
             rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)
             #rf, rf_max = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)[:2]
-            ete_diff.show_difftable_summary(difftable, rf, rf_max) #ziqi
+            ete_diff.show_difftable_summary(difftable, rf, rf_max)
         else:
             return difftable
 

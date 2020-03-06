@@ -258,21 +258,25 @@ def show_difftable_summary(difftable, rf=-1, rf_max=-1, branchdist=False):
 
     total_dist = 0
     total_bdist = 0
+    avg_dist = 0
+    
     for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
         total_dist += dist
         total_bdist += b_dist
-        
+    
+    avg_dist = total_dist/len(difftable)
+
     if branchdist:
-        log.info("\n"+"\t".join(["Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
+        log.info("\n"+"\t".join(["Average Dist", "Total Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
         #print("\n"+"\t".join(["Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
         #print("%0.6f\t%0.6f\t%10d\t%d\t%d" %(total_dist,total_bdist, len(difftable), rf, rf_max))
-        showtable.append([total_dist,total_bdist, len(difftable), rf, rf_max])
+        showtable.append([avg_dist, total_dist, total_bdist, len(difftable), rf, rf_max])
 
     else:
-        log.info("\n"+"\t".join(["Dist", "Mismatches", "RF", "maxRF"]))
+        log.info("\n"+"\t".join(["Average Dist", "Total Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
         #print("\n"+"\t".join(["Dist", "Mismatches", "RF", "maxRF"]))
         #print("%0.6f\t%10d\t%d\t%d" %(total_dist, len(difftable), rf, rf_max))
-        showtable.append([total_dist, len(difftable), rf, rf_max])
+        showtable.append([avg_dist, total_dist, len(difftable), rf, rf_max])
 
     return showtable
 
@@ -518,12 +522,12 @@ def run(args):
                         display_results = show_difftable_summary(difftable, rf, rf_max, branchdist=branchdist)
                         for display_result in display_results:
                             if branchdist:
-                                print("\n"+"\t".join(["Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
-                                print("%0.6f\t%0.6f\t%10d\t%d\t%d" %(display_result[0],display_result[1], display_result[2], display_result[3], display_result[4]))
+                                print("\n"+"\t".join(["Average Dist", "Total Dist", "Branch Dist", "Mismatches", "RF", "maxRF"]))
+                                print("%0.6f\t%0.6f\t%0.6f\t%10d\t%d\t%d" %(display_result[0],display_result[1], display_result[2], display_result[3], display_result[4], display_result[5]))
 
                             else:
-                                print("\n"+"\t".join(["Dist", "Mismatches", "RF", "maxRF"]))
-                                print("%0.6f\t%10d\t%d\t%d" %(display_result[0],display_result[1], display_result[2], display_result[3]))
+                                print("\n"+"\t".join(["Average Dist", "Total Dist", "Mismatches", "RF", "maxRF"]))
+                                print("%0.6f\t%0.6f\t%10d\t%d\t%d" %(display_result[0],display_result[1], display_result[2], display_result[3], display_result[4]))
 
 
                 else:
