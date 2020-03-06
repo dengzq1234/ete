@@ -1985,9 +1985,10 @@ class TreeNode(object):
         showtable_summary = ete_diff.show_difftable_summary(difftable, rf, rf_max, branchdist=branchdist) 
 
         #default
-        results['total_dist'] = showtable_summary[0][0] # summary columns ["Dist", "*Branch Dist", "Mismatches", "RF"， "MaxRF"]
+        results['avg_dist'] = showtable_summary[0][0] # summary columns ["Average Dist", "Total Dist", "*Branch Dist", "Mismatches", "RF"， "MaxRF"]
+        results['total_dist'] = showtable_summary[0][1] 
         if branchdist:
-            results['branch_dist'] = showtable_summary[0][1]
+            results['branch_dist'] = showtable_summary[0][2]
         results['mismatches'] = showtable_summary[0][-3]
         results['rf'] = showtable_summary[0][-2]
         results['max_rf'] = showtable_summary[0][-1]
