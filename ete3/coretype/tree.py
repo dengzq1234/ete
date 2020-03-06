@@ -1949,7 +1949,7 @@ class TreeNode(object):
             result["ref_edges"] = valid_ref_edges
         return result
 
-    def diff(self, t2, output='difftable', attr_t1='name', attr_t2='name', branchdist=None, distance=None, color=True): #experimental
+    def diff(self, t2, output='difftable', attr_t1='name', attr_t2='name', branchdist=None, distance=None, unrooted_trees=False,color=True): #experimental
         """
         compare this tree with another using robinson foulds symmetric difference
         and number of shared edges. Trees of different sizes and with duplicated
@@ -1981,7 +1981,8 @@ class TreeNode(object):
         #difftable = ete_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2) # dataframe, each row is a diff information [dist, b_dist, side1, side2, diff_leaves, n1(as Tree node), n2(as Tree node) ]
         
         difftable = tree_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2, dist_fn=dist_fn, branchdist=branchdist)
-        rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)
+
+        rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2, unrooted_trees=unrooted_trees)
         showtable_summary = ete_diff.show_difftable_summary(difftable, rf, rf_max, branchdist=branchdist) 
 
         #default

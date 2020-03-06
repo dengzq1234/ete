@@ -421,6 +421,10 @@ def populate_args(diff_args_p):
                                 " Select between None, get_distances1 and get_distances2."
                                 " None by default"))
     
+    diff_args.add_argument("--unrooted", dest="unrooted",
+                              action = "store_true",
+                              help="""compare trees as unrooted""")
+
     diff_args.add_argument("-C", "--cpu", dest="maxjobs", type=int,
                             default=1, help="Maximum number of CPU/jobs"
                             " available in the execution host. If higher"
@@ -518,7 +522,8 @@ def run(args):
                         print('\n'.join(['\t'.join(map(str, items)) for items in display_result]))
 
                     elif args.report == 'table':
-                        rf, rf_max, _, _, _, _, _ = t1.robinson_foulds(t2, attr_t1=rattr, attr_t2=tattr)
+                        unrooted_trees = args.unrooted
+                        rf, rf_max, _, _, _, _, _ = t1.robinson_foulds(t2, attr_t1=rattr, attr_t2=tattr, unrooted_trees=unrooted_trees)
                         display_results = show_difftable_summary(difftable, rf, rf_max, branchdist=branchdist)
                         for display_result in display_results:
                             if branchdist:
