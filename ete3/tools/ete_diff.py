@@ -378,6 +378,7 @@ def show_difftable_tab(difftable, branchdist=False):
             showtable.append([dist, b_dist, n1.name, n2.name, len(side1), len(side2), len(diff),
                             sepstring(side1, "|"), sepstring(side2, "|"),
                             sepstring(diff, "|")])
+        
         #print('#' + '\t'.join(["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
     else:
         for dist, b_dist, side1, side2, diff, n1, n2 in difftable:
@@ -529,18 +530,18 @@ def run(args):
                     elif args.report == "diffs":
                         display_result = show_difftable(difftable, branchdist=branchdist)
                         if branchdist:
-                            print_table(display_result, header=["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "Diff"], 
+                            print_table(display_result, header=["Dist", "Branch Dist", "Internal1", "Internal2", "Size1", "Size2", "ndiffs", "Diff"], 
                             max_col_width=80, wrap_style="wrap", row_line=True)
                         else:
-                            print_table(display_result, header=["Dist", "Size1", "Size2", "ndiffs", "Diff"],
+                            print_table(display_result, header=["Dist", "Internal1", "Internal2", "Size1", "Size2", "ndiffs", "Diff"],
                             max_col_width=80, wrap_style="wrap", row_line=True)
 
                     elif args.report == "diffs_tab":
                         display_result = show_difftable_tab(difftable, branchdist=branchdist)
                         if branchdist:
-                            print('#' + '\t'.join(["Dist", "Branch Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
+                            print('#' + '\t'.join(["Dist", "Branch Dist", "Internal1", "Internal2", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"]))
                         else:
-                            print('#' + '\t'.join(["Dist", "Size1", "Size2", "ndiffs",  "refTree", "targetTree", "Diff" ])) 
+                            print('#' + '\t'.join(["Dist", "Internal1", "Internal2", "Size1", "Size2", "ndiffs",  "refTree", "targetTree", "Diff" ])) 
                         print('\n'.join(['\t'.join(map(str, items)) for items in display_result]))
 
                     elif args.report == 'table':
