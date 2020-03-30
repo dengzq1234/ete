@@ -57,6 +57,8 @@ log = logging.Logger("main")
 
 from ..coretype.tree_diff import treediff, EUCL_DIST, EUCL_DIST_B, RF_DIST, get_distances1, get_distances2
 
+DESC = ""
+
 def sepstring(items, sep=", "):
     return sep.join(sorted(map(str, items)))
 
