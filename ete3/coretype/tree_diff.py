@@ -11,7 +11,7 @@ import multiprocessing as mp
 #from ..coretype.tree import Tree
 from .tree import Tree
 from ..utils import print_table, color
-from ..tools.ete_diff_lib._lapjv import lapjv # at the end, this should be removed and use it from conda/channel Ziqi
+#from ..tools.ete_diff_lib._lapjv import lapjv
 import textwrap
 import argparse
 import logging
@@ -193,7 +193,8 @@ def treediff(t1, t2, attr1, attr2, dist_fn=EUCL_DIST, reduce_matrix=False,branch
 
     matrix = np.asarray(matrix, dtype=np.float32)
 
-    cols , _ = lapjv(matrix,extend_cost=True)
+    #print(lapjv(matrix,extend_cost=True))
+    _, cols, _ = lapjv(matrix,extend_cost=True) #not extend a non-square matrix, return opt, x_c, y_c
 
     difftable = []
     b_dist = -1 #should be others
