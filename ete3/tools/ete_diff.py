@@ -464,9 +464,9 @@ def run(args):
     else:
  
         for rtree in args.ref_trees:
-            
+
             t1 = Tree(rtree,format=args.ref_newick_format)
-            
+
             for ttree in args.src_trees:
 
                 t2 = Tree(ttree,format=args.src_newick_format)         
