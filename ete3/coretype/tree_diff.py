@@ -10,10 +10,8 @@ import itertools
 import multiprocessing as mp
 #from ..coretype.tree import Tree
 from .tree import Tree
-from ..utils import print_table, color
-#from ..tools.ete_diff_lib._lapjv import lapjv
-import textwrap
-import argparse
+#from ..tools.ete_diff_lib._lapjv import lapjv # at the end, this should be removed and use it from conda/channel Ziqi
+from lap import lapjv
 import logging
 from tqdm import tqdm
 log = logging.Logger("main")
@@ -149,10 +147,11 @@ def treediff(t1, t2, attr1, attr2, dist_fn=EUCL_DIST, reduce_matrix=False,branch
     matrix = [[pool.apply_async(dist_fn,args=((n1,x),(n2,y))) for n2,y in parts2] for n1,x in parts1] 
     pool.close()
     
-    # Where output the calculation bar......... Ziqi
+    # progress bar
     for i in range(len(matrix)):
             for j in range(len(matrix[0])):
                 matrix[i][j] = matrix[i][j].get()
+
     # with tqdm(total=len(matrix[0])*len(matrix)) as pbar:
     #     for i in range(len(matrix)):
     #         for j in range(len(matrix[0])):
