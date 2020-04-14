@@ -48,7 +48,6 @@ import itertools
 import multiprocessing as mp
 from ..coretype.tree import Tree
 from ..utils import print_table, color
-#from .ete_diff_lib._lapjv import lapjv
 import textwrap
 import argparse
 import logging

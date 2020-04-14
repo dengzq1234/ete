@@ -1976,10 +1976,8 @@ class TreeNode(object):
         elif branchdist == "get_distances2":
             branchdist = tree_diff.get_distances2
         else:
-            branchdist = None # as default
-
+            branchdist = None 
         
-        #difftable = ete_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2) # dataframe, each row is a diff information [dist, b_dist, side1, side2, diff_leaves, n1(as Tree node), n2(as Tree node) ]
         difftable = tree_diff.treediff(self, t2, attr1=attr_t1, attr2=attr_t2, dist_fn=dist_fn, branchdist=branchdist)
 
         rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2, unrooted_trees=unrooted_trees)

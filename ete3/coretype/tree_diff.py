@@ -8,10 +8,9 @@ import numpy.linalg as LA
 import random
 import itertools
 import multiprocessing as mp
-#from ..coretype.tree import Tree
 from .tree import Tree
-#from ..tools.ete_diff_lib._lapjv import lapjv # at the end, this should be removed and use it from conda/channel Ziqi
-from lap import lapjv
+#from ..tools.ete_diff_lib._lapjv import lapjv 
+from lap import lapjv # install lapjv from external
 import logging
 from tqdm import tqdm
 log = logging.Logger("main")
