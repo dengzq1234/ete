@@ -1969,6 +1969,8 @@ class TreeNode(object):
             dist_fn = tree_diff.RF_DIST
         elif distance == 'eb':
             dist_fn = tree_diff.EUCL_DIST_B
+        elif distance == 'eb-all':
+            dist_fn = tree_diff.EUCL_DIST_B_ALL
 
         # set argument branchdist as --branch-distance {None,get_distances1,get_distances2}, None as default
         if branchdist == "get_distances1":
