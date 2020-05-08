@@ -54,7 +54,7 @@ import logging
 from tqdm import tqdm
 log = logging.Logger("main")
 
-from ..coretype.tree_diff import treediff, EUCL_DIST, EUCL_DIST_B, EUCL_DIST_B_ALL, RF_DIST, get_distances1, get_distances2
+from ..coretype.tree_diff import treediff, EUCL_DIST, EUCL_DIST_B, EUCL_DIST_B_ALL, EUCL_DIST_B_ALL_NODES, RF_DIST, get_distances1, get_distances2
 
 DESC = ""
 
@@ -244,7 +244,7 @@ def populate_args(diff_args_p):
                         help="If enabled, it will use colors in some of the report")
     
     diff_args.add_argument("--distance", dest="distance",
-                           type=str, choices= ['e', 'rf', 'eb','eb-all'], default='e',
+                           type=str, choices= ['e', 'rf', 'eb','eb-all','eb-all-nodes'], default='e',
                            help=('Distance measure: e = Euclidean distance, rf = Robinson-Foulds symetric distance'
                                  ' eb = Euclidean distance + branch length difference between disjoint leaves'))
     
@@ -319,6 +319,8 @@ def run(args):
                     dist_fn = EUCL_DIST_B
                 elif args.distance == 'eb-all':
                     dist_fn = EUCL_DIST_B_ALL
+                elif args.distance == 'eb-all-nodes':
+                    dist_fn = EUCL_DIST_B_ALL_NODES
                     
                 if args.branchdist == "get_distances1":
                     branchdist = get_distances1

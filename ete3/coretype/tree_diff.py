@@ -39,8 +39,18 @@ def EUCL_DIST_B_ALL(*args):
     #attr2 = args[3]
 
     # only check the branchdist of leaves
-    #dist_a = sum([descendant.dist for descendant in a[0].iter_leaves()]) 
-    #dist_b = sum([descendant.dist for descendant in b[0].iter_leaves()])
+    dist_a = sum([descendant.dist for descendant in a[0].iter_leaves()]) 
+    dist_b = sum([descendant.dist for descendant in b[0].iter_leaves()])
+
+
+    return 1 - (float(len(a[1] & b[1])) / max(len(a[1]), len(b[1]))) + abs(dist_a - dist_b)
+
+def EUCL_DIST_B_ALL_NODES(*args):
+
+    a = args[0]
+    b = args[1]
+    #attr1 = args[2]
+    #attr2 = args[3]
     
     # check branchdist of all nodes
     dist_a = sum([descendant.dist for descendant in a[0].traverse()])
