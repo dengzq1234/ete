@@ -241,7 +241,7 @@ def load_node_size(n):
         size = 0
         for ch in n.children:
             size += load_node_size(ch)
-    n.add_feature("_size", size)
+    n.add_prop("_size", size)
     return size
 
 def render_tree(tree, fname):
