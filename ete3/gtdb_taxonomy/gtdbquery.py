@@ -187,7 +187,7 @@ class GTDBTaxa(object):
 
     def get_rank(self, taxids):
         'return a dictionary converting a list of taxids into their corresponding GTDB taxonomy rank'
-
+        
         all_ids = set(taxids)
         all_ids.discard(None)
         all_ids.discard("")
@@ -847,6 +847,6 @@ def upload_data(dbfile):
 if __name__ == "__main__":
     gtdb = GTDBTaxa()
     gtdb.update_taxonomy_database(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gtdbdump', 'gtdbr202dump.tar.gz'))
-    print(gtdb.get_rank(['p__Bacteroidota', 'p__Firmicutes_F']))
+    #print(gtdb.get_rank(['p__Bacteroidota', 'p__Firmicutes_F']))
     descendants = gtdb.get_descendant_taxa('p__Firmicutes_B', collapse_subspecies=True, return_tree=True)
     print(descendants.get_ascii(attributes=['sci_name', 'taxid','rank']))
