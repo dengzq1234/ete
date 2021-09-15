@@ -1982,7 +1982,7 @@ class TreeNode(object):
         elif output == "diffs_tab":
             ete_diff.show_difftable_tab(difftable)
         elif output == 'table':
-            rf, rf_max, _, _, _, _, _ = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)[:2]
+            rf, rf_max, _, _, _, _, _ = self.robinson_foulds(t2, attr_t1=attr_t1, attr_t2=attr_t2)
             ete_diff.show_difftable_summary(difftable, rf, rf_max)
         else:
             return difftable
