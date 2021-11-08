@@ -100,7 +100,6 @@ def render_tree(t, imgName, w=None, h=None, layout=None,
     global _QApp
     for nid, n in enumerate(t.traverse("preorder")):
         n.add_prop("_nid", nid)
-        #n.properties["_nid"] = nid
     scene, img = init_scene(t, layout, tree_style)
     tree_item, n2i, n2f = render(t, img)
 

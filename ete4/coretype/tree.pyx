@@ -55,7 +55,7 @@ from .. import utils
 try:
     from ..treeview.main import NodeStyle, _FaceAreas, FaceContainer, FACE_POSITIONS
     from ..treeview.faces import Face
-    from ete4.smartview.ete.faces import Face as smartFace
+    from ete4.smartview import Face as smartFace
 except ImportError:
     TREEVIEW = False
 else:
@@ -173,13 +173,11 @@ cdef class TreeNode(object):
 
     def _get_children(self):
         return self._children
-
     def _set_children(self, children):
         if not hasattr(children, '__iter__'):
             raise TreeError(f'Incorrect children type: {type(children)}. Children should to be iterable')
-        for child in children:
-            if type(child) != type(self):
-                raise TreeError(f'Incorrect child type: {type(child)}')
+        self._children = []
+        self.add_children(children)
 
 
     def _get_style(self):
@@ -913,7 +911,8 @@ cdef class TreeNode(object):
         :argument properties: a list of feature names to be exported
           using the Extended Newick Format (i.e. properties=["name",
           "dist"]). Use an empty list to export all available properties
-          in each node (properties=[])
+          in each node (properties=[]), assign it None to mute all the 
+          properties (properties=None)
 
         :argument outfile: writes the output to a given file
 
@@ -932,7 +931,7 @@ cdef class TreeNode(object):
 
         ::
 
-             t.write(properties=["species","name"], format=1)
+             t.write(properties=["species","name"], format=1, outfile="mytree.nwx")
 
         """
 
@@ -1342,7 +1341,7 @@ cdef class TreeNode(object):
 
     def set_outgroup(self, outgroup, branch_properties=None):
         """
-        Sets a descendant node as the outgroup of a tree.  This function
+        Returns a descendant node as the outgroup of a tree.  This function
         can be used to root a tree or even an internal node.
 
         :outgroup: a node instance within the same tree
@@ -1350,7 +1349,7 @@ cdef class TreeNode(object):
         :branch_properties: list of branch properties (other than "support").
         """
         from ete4.smartview.ete.gardening import root_at
-        root_at(outgroup, branch_properties)
+        return root_at(outgroup, branch_properties)
 
     def unroot(self, mode='legacy'):
         """
@@ -1421,13 +1420,13 @@ cdef class TreeNode(object):
                                     layout=layout, tree_style=tree_style,
                                       units=units, dpi=dpi)
 
-    def explore(self, tree_name=None, tree_style=None, layouts=[]):
+    def explore(self, tree_name=None, tree_style=None, layouts=[], port=5000):
         """
         Starts an interactive smartview session to visualize current node
         structure using provided TreeStyle.
 
         :tree_name string: name used to store tree in local database.
-        Autamatically generated if not provided.
+        Automatically generated if not provided.
 
         :tree_style TreeStyle: default TreeStyle if not provided.
 
@@ -1436,11 +1435,14 @@ cdef class TreeNode(object):
         be adressed by such in the explorer.
         By default it includes: outline, leaf_name, branch_length 
         and branch_support.
+
+        :port: port used to run the local server (127.0.0.1). Default 5000
         """
         from ete4.smartview.gui.server import run_smartview
 
         run_smartview(newick=self.write(format=1),
-                tree_name=tree_name, tree_style=tree_style, layouts=layouts)
+                tree_name=tree_name, tree_style=tree_style, layouts=layouts,
+                port=port)
 
     def copy(self, method="cpickle"):
         """.. versionadded: 2.1
@@ -1917,7 +1919,7 @@ cdef class TreeNode(object):
             orig_target_size = len(source_tree)
             ntrees, ndups, sp_trees = source_tree.get_speciation_trees(
                 autodetect_duplications=True, newick_only=True,
-                target_attr=source_tree_attr, map_features=[source_tree_attr, "support"])
+                target_attr=source_tree_attr, map_properties=[source_tree_attr, "support"])
 
             if ntrees < max_treeko_splits_to_be_artifact:
                 all_rf = []
@@ -2139,7 +2141,7 @@ cdef class TreeNode(object):
         the same distance to root).
         """
 
-                # pre-calculate how many splits remain under each node
+        # pre-calculate how many splits remain under each node
         node2max_depth = {}
         for node in self.traverse("postorder"):
             if not node.is_leaf():
@@ -2377,8 +2379,7 @@ cdef class TreeNode(object):
 
         def _resolve(node):
             if len(node.children) > 2:
-                children = list(node.children)
-                node.children = []
+                children = list(node.remove_children())
                 next_node = root = node
                 for i in range(len(children)-2):
                     next_node = next_node.add_child()

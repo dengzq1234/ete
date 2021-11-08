@@ -50,14 +50,15 @@ from itsdangerous import TimedJSONWebSignatureSerializer as JSONSigSerializer
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from ete4 import Tree
-from ete4.smartview.ete.layouts import TreeStyle
+from ete4.smartview import TreeStyle
 from ete4.treeview.main import _FaceAreas
 from ete4.parser.newick import NewickError
 from ete4.smartview.utils import InvalidUsage, get_random_string
 from ete4.smartview.ete import nexus, draw, gardening as gdn
-from ete4.smartview.ete.layouts import get_layout_outline,\
+from ete4.smartview import get_layout_outline,\
         get_layout_leaf_name, get_layout_branch_length,\
-        get_layout_branch_support, get_layout_align_link
+        get_layout_branch_support, get_layout_align_link,\
+        get_layout_nleaves
 
 # call initialize() to fill these up
 app = None
@@ -72,6 +73,7 @@ class AppTree:
     style: TreeStyle = None
     timer: float = None
     initialized: bool = False
+    selected: dict = None
     searches: dict = None
 
 # REST api.
@@ -80,6 +82,7 @@ class Drawers(Resource):
     def get(self, name=None, tree_id=None):
         "Return data from the drawer. In aligned mode if aligned faces"
         try:
+            tree_id, _ = get_tid(tree_id)
             if name not in ['Rect', 'Circ'] and\
                     any(getattr(ly, 'contains_aligned_face', False)\
                         for ly in app.trees[int(tree_id)].style.layout_fn):
@@ -106,7 +109,10 @@ class Trees(Resource):
         
         # Update tree's timer
         if rule.startswith('/trees/<string:tree_id>'):
-            app.trees[int(tree_id)].timer = time()
+            tid, subtree = get_tid(tree_id)
+            load_tree(tree_id)  # load if it was not loaded in memory
+            tree = app.trees[int(tid)]
+            tree.timer = time()
 
         if rule == '/trees':
             if app.memory_only:
@@ -116,15 +122,37 @@ class Trees(Resource):
             if app.memory_only:
                 raise InvalidUsage(f'invalid path {rule} in memory_only mode', 404)
             return get_tree(tree_id)
+        elif rule == '/trees/<string:tree_id>/nodeinfo':
+            node = gdn.get_node(tree.tree, subtree)
+            return node.props
         elif rule == '/trees/<string:tree_id>/name':
-            load_tree(tree_id)
-            return app.trees[int(tree_id)].name
+            return tree.name
         elif rule == '/trees/<string:tree_id>/newick':
             MAX_MB = 2
             return get_newick(tree_id, MAX_MB)
+        elif rule == '/trees/<string:tree_id>/selected':
+            selected = {  node_id: { 'name': name, 'nparents': len(parents) }
+                for node_id, (name, _, parents) in (tree.selected or {}).items() }
+            return { 'selected': selected }
+        elif rule == '/trees/<string:tree_id>/select':
+            nparents = store_selection(tid, subtree, request.args.copy())
+            return {'message': 'ok', 'nparents': nparents}
+        elif rule == '/trees/<string:tree_id>/remove_selection':
+            removed = remove_selection(tid, subtree)
+            message = 'ok' if removed else 'search not found'
+            return {'message': message}
+        elif rule == '/trees/<string:tree_id>/searches':
+            searches = { 
+                text: { 'nresults' : len(results), 'nparents': len(parents) }
+                for text, (results, parents) in (tree.searches or {}).items() }
+            return { 'searches': searches }
         elif rule == '/trees/<string:tree_id>/search':
             nresults, nparents = store_search(tree_id, request.args.copy())
             return {'message': 'ok', 'nresults': nresults, 'nparents': nparents}
+        elif rule == '/trees/<string:tree_id>/remove_search':
+            removed = remove_search(tid, request.args.copy())
+            message = 'ok' if removed else 'search not found'
+            return {'message': message}
         elif rule == '/trees/<string:tree_id>/draw':
             drawer = get_drawer(tree_id, request.args.copy())
             return list(drawer.draw())
@@ -135,7 +163,7 @@ class Trees(Resource):
             t = load_tree(tree_id)
             properties = set()
             for node in t.traverse():
-                properties |= node.properties.keys()
+                properties |= node.props.keys()
             return list(properties)
         elif rule == '/trees/<string:tree_id>/nodecount':
             t = load_tree(tree_id)
@@ -146,8 +174,7 @@ class Trees(Resource):
                     tleaves += 1
             return {'tnodes': tnodes, 'tleaves': tleaves}
         elif rule == '/trees/<string:tree_id>/ultrametric':
-            # Not for now... but it may be tree specific
-            return app.trees[int(tree_id)].style.ultrametric
+            return tree.style.ultrametric
 
     def post(self):
         "Add tree(s)"
@@ -160,7 +187,8 @@ class Trees(Resource):
 
         # Update tree's timer
         if rule.startswith('/trees/<string:tree_id>'):
-            app.trees[int(tree_id)].timer = time()
+            tid, subtree = get_tid(tree_id)
+            app.trees[int(tid)].timer = time()
 
         if rule == '/trees/<string:tree_id>':
             modify_tree_fields(tree_id)
@@ -368,10 +396,11 @@ def get_drawer(tree_id, args):
 
         update_ultrametric(args.get('ultrametric'), tid)
 
+        selected = tree.selected
         searches = tree.searches
         
         return drawer_class(load_tree(tree_id), viewport, panel, zoom,
-                    limits, collapsed_ids, searches, tree.style)
+                    limits, collapsed_ids, selected, searches, tree.style)
     except StopIteration:
         raise InvalidUsage(f'not a valid drawer: {drawer_name}')
     except (ValueError, AssertionError) as e:
@@ -388,6 +417,16 @@ def get_newick(tree_id, max_mb):
         raise InvalidUsage('newick too big (%.3g MB)' % size_mb)
 
     return newick
+
+
+def remove_search(tid, args):
+    "Remove search"
+    if 'text' not in args:
+        raise InvalidUsage('missing search text')
+
+    searches = app.trees[int(tid)].searches
+    text = args.pop('text').strip()
+    return searches.pop(text, None)
 
 
 def store_search(tree_id, args):
@@ -408,13 +447,39 @@ def store_search(tree_id, args):
                 parents.add(parent)
                 parent = parent.up
 
-        app.trees[int(tree_id)].searches[text] = (results, parents)
+        tid = get_tid(tree_id)[0]
+        app.trees[int(tid)].searches[text] = (results, parents)
 
         return len(results), len(parents)
     except InvalidUsage:
         raise
     except Exception as e:
         raise InvalidUsage(f'evaluating expression: {e}')
+
+
+def remove_selection(tid, subtree):
+    "Remove selection"
+    subtree_string = ",".join([ str(i) for i in subtree ])
+    return app.trees[int(tid)].selected.pop(subtree_string, None)
+
+
+def store_selection(tid, subtree, args):
+    "Store the result and parents of a selection and return number of parents"
+
+    app_tree = app.trees[int(tid)]
+    node = gdn.get_node(app_tree.tree, subtree)
+
+    parents = set()
+    parent = node.up
+    while parent and parent not in parents:
+        parents.add(parent)
+        parent = parent.up
+
+    subtree_string = ",".join([ str(i) for i in subtree ])
+    name = args.pop('name').strip()
+    app_tree.selected[subtree_string] = (name, node, parents)
+
+    return len(parents)
 
 
 def get_search_function(text):
@@ -454,7 +519,7 @@ def get_eval_search(expression):
     return lambda node: safer_eval(code, {
         'name': node.name, 'is_leaf': node.is_leaf(),
         'length': node.dist, 'dist': node.dist, 'd': node.dist,
-        'properties': node.properties, 'p': node.properties,
+        'props': node.props, 'p': node.props,
         'get': dict.get,
         'children': node.children, 'ch': node.children,
         'size': node.size, 'dx': node.size[0], 'dy': node.size[1],
@@ -605,7 +670,7 @@ def get_layouts(layouts=[]):
     # Get default layouts from their getters
     default_layouts = [ get_layout_outline(), get_layout_leaf_name(),
             get_layout_branch_length(), get_layout_branch_support(),
-            get_layout_align_link(), ]
+            get_layout_nleaves(), get_layout_align_link(), ]
 
     # Get layouts from TreeStyle
     ts_layouts = app.trees['default'].style.layout_fn
@@ -799,6 +864,7 @@ def initialize(tree=None, tree_style=None, memory_only=False):
         style=deepcopy(tree_style) or TreeStyle(),
         timer = time(),
         searches = {},
+        selected = {},
     ))
 
     db = sqlalchemy.create_engine('sqlite:///' + app.config['DATABASE'])
@@ -865,6 +931,7 @@ def add_resources(api):
     add(Trees,
         '/trees',
         '/trees/<string:tree_id>',
+        '/trees/<string:tree_id>/nodeinfo',
         '/trees/<string:tree_id>/name',
         '/trees/<string:tree_id>/newick',
         '/trees/<string:tree_id>/draw',
@@ -872,7 +939,12 @@ def add_resources(api):
         '/trees/<string:tree_id>/properties',
         '/trees/<string:tree_id>/nodecount',
         '/trees/<string:tree_id>/ultrametric',
+        '/trees/<string:tree_id>/select',
+        '/trees/<string:tree_id>/selected',
+        '/trees/<string:tree_id>/remove_selection',
         '/trees/<string:tree_id>/search',
+        '/trees/<string:tree_id>/searches',
+        '/trees/<string:tree_id>/remove_search',
         '/trees/<string:tree_id>/sort',
         '/trees/<string:tree_id>/root_at',
         '/trees/<string:tree_id>/move',
@@ -882,7 +954,7 @@ def add_resources(api):
 
 
 def run_smartview(newick=None, tree_name=None, tree_style=None, layouts=[],
-        update_old_tree=True, memory_only=False, purge_trees=False):
+        update_old_tree=True, memory_only=False, purge_trees=False, port=5000):
     # Set tree_name to None if no newick was provided
     # Generate tree_name if none was provided
     # update_old_tree: replace tree in local database if identical tree_name
@@ -911,7 +983,7 @@ def run_smartview(newick=None, tree_name=None, tree_style=None, layouts=[],
             tid = add_tree(tree_data, replace=update_old_tree)
             print(f'Added tree {tree_name} with id {tid}.')
 
-    app.run(debug=True, use_reloader=False)
+    app.run(debug=True, use_reloader=False, port=port)
 
 
 if __name__ == '__main__':

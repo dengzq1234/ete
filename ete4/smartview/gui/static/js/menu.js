@@ -4,7 +4,7 @@ import { api } from "./api.js";
 import { view, menus, on_tree_change,
          on_drawer_change, show_minimap, get_tid } from "./gui.js";
 import { draw_minimap } from "./minimap.js";
-import { update } from "./draw.js";
+import { update, draw_tree_scale } from "./draw.js";
 
 export { init_menus };
 
@@ -20,7 +20,7 @@ function init_menus(trees) {
     ]});
     create_menu_main(tab.pages[0], trees);
     create_menu_representation(tab.pages[1]);
-    create_menu_tags_searches(tab.pages[2]);
+    create_menu_selection(tab.pages[2]);
 }
 
 
@@ -32,6 +32,8 @@ function create_menu_main(menu, trees) {
     add_folder_view(menu);
 
     add_folder_minimap(menu);
+
+    add_folder_tree_scale(menu);
 
     menu.addInput(view, "select_text", { label: "select text", position: 'left' })
       .on("change", () => {
@@ -79,10 +81,10 @@ function create_menu_representation(menu) {
 }
 
 
-function create_menu_tags_searches(menu) {
-    // filled dynamically in collapsed.js and tag.js
+function create_menu_selection(menu) {
+    // filled dynamically in collapsed.js and select.js
     menus.collapsed = menu.addFolder({ title: "Collapsed" }); 
-    menus.tags = menu.addFolder({ title: "Tags" });
+    menus.selected = menu.addFolder({ title: "Selected" });
 
     add_folder_searches(menu);
 }
@@ -117,7 +119,6 @@ function add_folder_tree(menu, trees) {
                                                     expanded: false });
     folder_download.addButton({ title: "newick" }).on("click", view.download.newick);
     folder_download.addButton({ title: "svg" }).on("click", view.download.svg);
-    folder_download.addButton({ title: "image" }).on("click", view.download.image);
 }
 
 
@@ -161,8 +162,15 @@ function add_folder_view(menu) {
     folder_tl.addMonitor(view.tl, "y", { format: v => v.toFixed(3) });
 
     const folder_zoom = folder_view.addFolder({ title: "Zoom" });
-    folder_zoom.addMonitor(view.zoom, "x", { format: v => v.toFixed(3) });
-    folder_zoom.addMonitor(view.zoom, "y", { format: v => v.toFixed(3) });
+
+    folder_zoom.addInput(view.zoom, "x", { label: "x", 
+                                           format: v => v.toFixed(1),
+                                           min: 1, max: div_tree.offsetWidth })
+        .on("change", update)
+    folder_zoom.addInput(view.zoom, "y", { label: "y", 
+                                           format: v => v.toFixed(1),
+                                           min: 1, max: div_tree.offsetHeight })
+        .on("change", update)
 
     const folder_aligned = folder_view.addFolder({ title: "Aligned panel",
                                                    expanded: false });
@@ -305,8 +313,8 @@ function style(name) {
 
 
 function add_folder_minimap(menu) {
-    const folder_minimap = menu.addFolder({ title: "Minimap", 
-                                            expanded: false });
+    const folder_minimap = menu.addFolder(
+        { title: "Minimap", expanded: false });
 
     folder_minimap.addInput(view.minimap, "width", { min: 1, max: 100 })
       .on("change", () => {
@@ -324,4 +332,21 @@ function add_folder_minimap(menu) {
     });
     menus.minimap = folder_minimap.addInput(view.minimap, "show")
         .on("change", () => show_minimap(view.minimap.show));
+}
+
+
+function add_folder_tree_scale(menu) {
+    const folder_scale = menu.addFolder(
+        { title: "Tree scale", expanded: false });
+
+    folder_scale.addInput(view.tree_scale, "length", 
+        { label: "width (px)", min: 10, max: 300 })
+        .on("change", draw_tree_scale);
+
+    folder_scale.addInput(view.tree_scale, "color", { view: "color" })
+        .on("change", draw_tree_scale);
+
+    folder_scale.addInput(view.tree_scale, "show", { view: "color" })
+        .on("change", draw_tree_scale);
+    
 }

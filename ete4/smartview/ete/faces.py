@@ -52,6 +52,11 @@ _ntcolors = {
     ' ':"#FFFFFF"
     }
 
+
+def clean_text(text):
+    return re.sub(r'[^A-Za-z0-9_-]', '',  text)
+
+
 def swap_pos(pos, angle):
     if abs(angle) >= pi / 2:
         if pos == 'branch-top':
@@ -83,9 +88,9 @@ class Face(object):
         self._check_own_variables()
         return self._box
 
-    def compute_fsize(self, dx, dy, drawer):
+    def compute_fsize(self, dx, dy, drawer, max_fsize=None):
         zx, zy = drawer.zoom
-        self._fsize = min([dx * zx * CHAR_HEIGHT, abs(dy * zy), self.max_fsize])
+        self._fsize = min([dx * zx * CHAR_HEIGHT, abs(dy * zy), max_fsize or self.max_fsize])
 
     def compute_bounding_box(self, 
             drawer,
@@ -240,7 +245,7 @@ class TextFace(Face):
         return self._box
 
     def fits(self):
-        return self._fsize >= self.min_fsize
+        return self._content != "None" and self._fsize >= self.min_fsize
 
     def draw(self, drawer):
         self._check_own_variables()
@@ -281,9 +286,8 @@ class AttrFace(TextFace):
             raise Exception(f'An associated **node** must be provided to compute **content**.')
 
     def get_content(self):
-        self._check_own_node()
         content = str(getattr(self.node, self._attr, None)\
-                or self.node.properties.get(self._attr))
+                or self.node.props.get(self._attr))
         self._content = self.formatter % content if self.formatter else content
         return self._content
 
@@ -360,8 +364,9 @@ class CircleFace(Face):
         
     def draw(self, drawer):
         self._check_own_variables()
+        style = {'fill': self.color} if self.color else {}
         yield draw_circle(self._center, self._max_radius,
-                self.name, style={'fill': self.color})
+                self.name, style=style)
 
 
 class RectFace(Face):
@@ -369,9 +374,10 @@ class RectFace(Face):
             text=None, fgcolor='black', # text color
             min_fsize=6, max_fsize=15,
             ftype='sans-serif',
+            name="",
             padding_x=0, padding_y=0):
 
-        Face.__init__(self, padding_x=padding_x, padding_y=padding_y)
+        Face.__init__(self, name=name, padding_x=padding_x, padding_y=padding_y)
 
         self.width = width
         self.height = height
@@ -421,8 +427,14 @@ class RectFace(Face):
                (type(max_height) in (int, float) and max_height <= 0):
                 return 0, 0
 
-            width = self.width / zx
-            height = self.height / zy
+            width = self.width / zx if self.width is not None else None
+            height = self.height / zy if self.height is not None else None
+
+            if width is None:
+                return max_width or 0, min(height or float('inf'), max_height)
+            if height is None:
+                return min(width, max_width or float('inf')), max_height
+
             hw_ratio = height / width
 
             if max_width and width > max_width:
@@ -508,6 +520,42 @@ class RectFace(Face):
                     style=text_style)
 
 
+# Selected faces
+class SelectedFace(Face):
+    def __init__(self, node_id):
+        self.node_id = clean_text(node_id)
+        self.name = f'selected_result_{self.node_id}'
+
+    def __name__(self):
+        return "SelectedFace"
+
+class SelectedCircleFace(SelectedFace, CircleFace):
+    def __init__(self, node_id, radius=15,
+            padding_x=0, padding_y=0):
+
+        SelectedFace.__init__(self, node_id)
+
+        CircleFace.__init__(self, radius=radius, color=None,
+                name=self.name,
+                padding_x=padding_x, padding_y=padding_y)
+
+    def __name__(self):
+        return "SelectedCircleFace"
+
+class SelectedRectFace(SelectedFace, RectFace):
+    def __init__(self, node_id, width=15, height=15,
+            padding_x=1, padding_y=0):
+
+        SelectedFace.__init__(self, node_id);
+
+        RectFace.__init__(self, width=width, height=height, color=None,
+                name=self.name,
+                padding_x=padding_x, padding_y=padding_y)
+
+    def __name__(self):
+        return "SelectedRectFace"
+
+
 class OutlineFace(Face):
     def __init__(self, 
             stroke_color='black', stroke_width=0.5,
@@ -539,7 +587,8 @@ class OutlineFace(Face):
             n_row, n_col,
             dx_before, dy_before):
 
-        self.outline = drawer.outline or Box(0, 0, 0, 0)
+        self.outline = drawer.outline if drawer.outline \
+            and len(drawer.outline) == 5 else SBox(0, 0, 0, 0, 0)
 
         if drawer.TYPE == 'circ':
             r, a, dr_min, dr_max, da = self.outline
@@ -549,10 +598,10 @@ class OutlineFace(Face):
         return self.get_box()
 
     def get_box(self):
-        if not self.outline:
-            return Box(0, 0, 0, 0)
-        x, y, dx_min, dx_max, dy = self.outline
-        return Box(x, y, dx_max, dy)
+        if self.outline and len(self.outline) == 5:
+            x, y, dx_min, dx_max, dy = self.outline
+            return Box(x, y, dx_max, dy)
+        return Box(0, 0, 0, 0)
 
     def fits(self):
         return True
@@ -614,7 +663,17 @@ class AlignLinkFace(Face):
             x, y = point
             dx, dy = size
             p1 = (x + bdx + dx_before, y + dy/2)
-            p2 = (drawer.viewport.x + drawer.viewport.dx, y + dy/2)
+            if drawer.TYPE == 'rect':
+                p2 = (drawer.viewport.x + drawer.viewport.dx, y + dy/2)
+            else:
+                aligned = sorted(drawer.tree_style.aligned_grid_dxs.items())
+                # p2 = (drawer.node_size(drawer.tree)[0], y + dy/2)
+                if not len(aligned):
+                    return Box(0, 0, 0, 0)
+                p2 = (aligned[0][1] - bdx, y + dy/2)
+                if p1[0] > p2[0]:
+                    return Box(0, 0, 0, 0)
+                p1, p2 = cartesian(p1), cartesian(p2)
 
             self.line = (p1, p2)
 
@@ -638,7 +697,8 @@ class AlignLinkFace(Face):
                 'opacity': self.opacity,
                 }
         if drawer.panel == 0 and drawer.viewport and\
-          (self.node.is_leaf() or self.node.is_collapsed):
+          (self.node.is_leaf() or self.node.is_collapsed)\
+          and self.line:
             p1, p2 = self.line
             yield draw_line(p1, p2, 'align-link', style=style)
 
@@ -703,22 +763,20 @@ class SeqFace(Face):
         x0, y, _, dy = self._box
         zx, zy = drawer.zoom
         dx = self.poswidth / zx
-        text_style = {
-            'max_fsize': self._fsize,
-            'text_anchor': 'middle',
-            'ftype': f'{self.ftype}, sans-serif', # default sans-serif
-            }
-        for idx, pos in enumerate(self.seq):
-            x = x0 + idx * dx
-            r = (x or 1e-10) if drawer.TYPE == 'circ' else 1
-            # Draw rect
-            box = Box(x, y, dx, dy)
-            if pos != '-':
-                yield draw_rect(box,
-                        self.seqtype + "_" + pos,
-                        style={'fill': self.colors[pos]})
-                # Draw text
-                if self.draw_text:
+        # Send sequences as a whole to be rendered by PIXIjs
+        yield [ "pixi-aa_notext", Box(x0, y, dx * len(self.seq), dy), self.seq ]
+        # Rende text if necessary
+        if self.draw_text:
+            text_style = {
+                'max_fsize': self._fsize,
+                'text_anchor': 'middle',
+                'ftype': f'{self.ftype}, sans-serif', # default sans-serif
+                }
+            for idx, pos in enumerate(self.seq):
+                x = x0 + idx * dx
+                r = (x or 1e-10) if drawer.TYPE == 'circ' else 1
+                # Draw rect
+                if pos != '-':
                     text_box = Box(x + dx / 2,
                             y + (dy - self._fsize / (zy * r)) / 2,
                             dx, dy)
@@ -732,6 +790,7 @@ class SeqMotifFace(Face):
             gap_format='line', seq_format='[]', 
             width=None, height=None, # max height
             fgcolor='black', bgcolor='#bcc3d0', gapcolor='gray',
+            gap_linewidth=0.2,
             max_fsize=12, ftype='sans-serif',
             padding_x=0, padding_y=0):
 
@@ -749,6 +808,7 @@ class SeqMotifFace(Face):
 
         self.seq_format = seq_format
         self.gap_format = gap_format
+        self.gap_linewidth = gap_linewidth
         self.compress_gaps = False
 
         self.poswidth = 0.5
@@ -809,7 +869,7 @@ class SeqMotifFace(Face):
                     if reg:
                         if reg.startswith("-") and self.seq_format != "seq":
                             self.regions.append([pos, pos+len(reg)-1,
-                                self.gap_format, self.poswidth, self.height,
+                                "gap_"+self.gap_format, self.poswidth, self.height,
                                 self.gapcolor, None, None])
                         else:
                             self.regions.append([pos, pos+len(reg)-1, 
@@ -827,7 +887,7 @@ class SeqMotifFace(Face):
                 if reg:
                     if reg.startswith("-") and self.seq_format != "seq":
                         self.regions.append([pos, pos+len(reg)-1,
-                            self.gap_format, 
+                            "gap_"+self.gap_format, 
                             self.poswidth, 1, 
                             self.gapcolor, None, None])
                     else:
@@ -841,9 +901,10 @@ class SeqMotifFace(Face):
         # Detect overlapping, reducing opacity in overlapping elements
         total_width = 0
         prev_end = -1
-        for idx, (start, end, _, w, *_) in enumerate(self.regions):
+        for idx, (start, end, shape, w, *_) in enumerate(self.regions):
             overlapping = abs(min(start - 1 - prev_end, 0))
-            total_width += w * (end + 1 - start - overlapping)
+            w = self.poswidth if shape.startswith("gap_") and self.compress_gaps else w
+            total_width += (w or self.poswidth) * (end + 1 - start - overlapping)
             prev_end = end
             opacity = self.overlaping_motif_opacity if overlapping else 1
             self.regions[idx].append(opacity)
@@ -893,8 +954,18 @@ class SeqMotifFace(Face):
         zx, zy = drawer.zoom
         x = x0
         prev_end = -1
+
+        if self.gap_format in ["line", "-"]:
+            p1 = (x0, y + dy / 2)
+            p2 = (x0 + self.width / zx, y + dy / 2)
+            if drawer.TYPE == 'circ':
+                p1 = cartesian(p1)
+                p2 = cartesian(p2)
+            yield draw_line(p1, p2, style={'stroke-width': self.gap_linewidth,
+                                           'stroke': self.gapcolor})
+
         for (start, end, shape, posw, h, fg, bg, text, opacity) in self.regions:
-            posw = posw * self.w_scale / zx
+            posw = (posw or self.poswidth) * self.w_scale / zx
             w = posw * (end + 1 - start)
             style = { 'fill': bg, 'opacity': opacity }
 
@@ -909,10 +980,14 @@ class SeqMotifFace(Face):
             h = min([h or default_h, self.height or default_h, default_h]) / zy
             box = Box(x, y + (dy - h / r) / 2, w, h / r)
 
-            # Line
-            if shape in ['line', '-']:
+            if shape.startswith("gap_"):
                 if self.compress_gaps:
                     w = posw
+                x += w
+                continue
+
+            # Line
+            if shape in ['line', '-']:
                 p1 = (x, y + dy / 2)
                 p2 = (x + w, y + dy / 2)
                 if drawer.TYPE == 'circ':
@@ -921,9 +996,11 @@ class SeqMotifFace(Face):
                 yield draw_line(p1, p2, style={'stroke-width': 0.5, 'stroke': fg})
 
             # Rectangle
-            elif shape in ('[]', '()'):
-                if shape == '()':
-                    style['rounded'] = 1;
+            elif shape == '[]':
+                yield [ "pixi-block", box ]
+
+            elif shape == '()':
+                style['rounded'] = 1;
                 yield draw_rect(box, '', style=style)
 
             # Rhombus
@@ -946,11 +1023,14 @@ class SeqMotifFace(Face):
                     yield draw_ellipse(center, rx, ry, style=style)
 
             # Sequence and compact sequence
-            elif shape in ['seq', 'compactseq']:
+            elif shape == 'compactseq':
                 seq = self.seq[start : end + 1]
-                postext = True if shape == 'seq' else False
+                yield [ "pixi-aa_notext", box, seq ]
+
+            elif shape == 'seq':
+                seq = self.seq[start : end + 1]
                 seq_face = SeqFace(seq, self.seqtype, posw * zx,
-                        draw_text=postext, max_fsize=self.max_fsize,
+                        draw_text=True, max_fsize=self.max_fsize,
                         ftype=self.ftype)
                 seq_face._box = box # assign box manually
                 seq_face.compute_fsize(posw, h, drawer)
@@ -958,7 +1038,12 @@ class SeqMotifFace(Face):
 
             # Text on top of shape
             if text:
-                self.compute_fsize(w, h, drawer)
+                try:
+                    ftype, fsize, color, text = text.split("|")
+                    fsize = int(fsize)
+                except:
+                    ftype, fsize, color = self.ftype, self.max_fsize, (fg or self.fcolor)
+                self.compute_fsize(w / len(text), h, drawer, fsize)
                 text_box = Box(x + w / 2,
                         y + (dy - self._fsize / (zy * r)) / 2,
                         self._fsize / (zx * CHAR_HEIGHT),
@@ -966,8 +1051,8 @@ class SeqMotifFace(Face):
                 text_style = {
                     'max_fsize': self._fsize,
                     'text_anchor': 'middle',
-                    'ftype': f'{self.ftype}, sans-serif',
-                    'fill': fg or self.fgcolor,
+                    'ftype': f'{ftype}, sans-serif',
+                    'fill': color,
                     }
                 yield draw_text(text_box, text, style=text_style)
 

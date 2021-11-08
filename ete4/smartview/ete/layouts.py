@@ -1,11 +1,11 @@
 from collections import defaultdict
 from types import FunctionType, MethodType
-from ete4 import NodeStyle
-from ete4.smartview.ete.faces import AttrFace, TextFace,\
-                                     CircleFace, RectFace,\
-                                     OutlineFace, AlignLinkFace
+from ete4.smartview import Face, AttrFace, TextFace,\
+        CircleFace, RectFace,\
+        SelectedRectFace, OutlineFace, AlignLinkFace
 from ete4.smartview.ete.draw import summary
 
+FACE_POSITIONS = ["branch-top", "branch-bottom", "branch-right", "aligned"]
 
 def get_layout_leaf_name(pos='branch-right', color='black', 
                          min_fsize=4, max_fsize=15,
@@ -15,7 +15,7 @@ def get_layout_leaf_name(pos='branch-right', color='black',
             color=color, padding_x=padding_x, padding_y=padding_y)
     def layout_fn(node):
         if node.is_leaf():
-            node.add_face(leaf_name_face, position=pos, column=0)
+            node.add_face(leaf_name_face, position=pos, column=1)
         else:
             # Collapsed face
             names = summary(node.children)
@@ -25,8 +25,29 @@ def get_layout_leaf_name(pos='branch-right', color='black',
                                 color=color, 
                                 min_fsize=min_fsize, max_fsize=max_fsize,
                                 padding_x=padding_x, padding_y=padding_y),
-                        position=pos, column=1, collapsed_only=True)
-    layout_fn.__name__ = 'leaf_name'
+                        position=pos, column=2, collapsed_only=True)
+    layout_fn.__name__ = 'Leaf name'
+    layout_fn.contains_aligned_face = pos == "aligned"
+    return layout_fn
+
+
+def get_layout_nleaves(pos='branch-right', collapsed_only=True,
+        formatter='(%s)', color="black",
+        min_fsize=4, max_fsize=15, ftype="sans-serif", 
+        padding_x=5, padding_y=0):
+    def layout_fn(node):
+        if not node.is_leaf():
+            nleaves = str(len(node))
+            nleaves_face = TextFace(f'{formatter}' % nleaves, color=color,
+                    min_fsize=min_fsize, max_fsize=max_fsize, ftype=ftype,
+                    padding_x=padding_x, padding_y=padding_y)
+            node.add_face(nleaves_face, position=pos, column=1,
+                    collapsed_only=True)
+            if not collapsed_only:
+                node.add_face(nleaves_face, position=pos, column=0)
+
+    layout_fn.__name__ = "Number of leaves"
+    layout_fn.contains_aligned_face = pos == "aligned"
     return layout_fn
 
 
@@ -38,7 +59,7 @@ def get_layout_branch_length(pos='branch-top',
 
     return get_layout_branch_attr(attr='dist',
                 formatter=formatter,
-                name='branch_length',
+                name='Branch length',
                 pos=pos,
                 color=color,
                 min_fsize=min_fsize, max_fsize=max_fsize,
@@ -53,6 +74,7 @@ def get_layout_branch_support(pos='branch-bottom',
 
     return get_layout_branch_attr(attr='support',
                 formatter=formatter,
+                name="Branch support",
                 pos=pos,
                 color=color,
                 min_fsize=min_fsize, max_fsize=max_fsize,
@@ -76,17 +98,21 @@ def get_layout_branch_attr(attr, pos, name=None,
             node.add_face(branch_attr_face, position=pos, column=0,
                     collapsed_only=True)
     layout_fn.__name__ = name or 'branch_' + str(attr)
+    layout_fn.contain = pos == "aligned"
     return layout_fn
 
 
-def get_layout_outline(collapsing_height=5):
-    outline_face = OutlineFace(collapsing_height=collapsing_height)
+def get_layout_outline(stroke_color="black", stroke_width=0.5, 
+        color="lightgray", opacity=0.3, collapsing_height=5):
+
+    outline_face = OutlineFace(stroke_color="black", stroke_width=stroke_width, 
+            color=color, opacity=opacity, collapsing_height=collapsing_height)
     def layout_fn(node):
         if not node.is_leaf():
             node.add_face(outline_face, 
                     position='branch-right', column=0,
                     collapsed_only=True)
-    layout_fn.__name__ = 'outline'
+    layout_fn.__name__ = 'Outline'
     return layout_fn
 
 
@@ -106,7 +132,7 @@ def get_layout_align_link(stroke_color='gray', stroke_width=0.5,
                           position='branch-right',
                           column=1e10,
                           collapsed_only=True)
-    layout_fn.__name__ = 'align_link'
+    layout_fn.__name__ = 'Aligned panel link'
     return layout_fn
 
 
@@ -122,11 +148,15 @@ class TreeStyle(object):
         
         self.show_outline = True
         self.show_leaf_name = True
+        self.show_nleaves = False
         self.show_branch_length = False
         self.show_branch_support = False
-        self.default_layouts = ['outline', 'leaf_name', 
-                                'branch_length', 'branch_support',
-                                'align_link']
+        self.default_layouts = ['Outline', 'Leaf name', 'Number of leaves',
+                                'Branch length', 'Branch support',
+                                'Aligned panel link']
+        # Selected face
+        self._selected_face = SelectedRectFace
+        self._selected_face_pos = "branch-right"
         
     @property
     def layout_fn(self):
@@ -150,6 +180,30 @@ class TreeStyle(object):
             else:
                 raise ValueError ("Required layout is not a function pointer nor a valid layout name.")
 
+    @property
+    def selected_face(self):
+        return self._selected_face
+
+    @selected_face.setter
+    def selected_face(self, face):
+        if isinstance(face, Face):
+            self._selected_face = face
+        else:
+            raise ValueError(f'{type(face)} is not a valid Face instance')
+
+    @property
+    def selected_face_pos(self):
+        return self._selected_face_pos
+
+    @selected_face_pos.setter
+    def selected_face_pos(self, pos):
+        if pos in FACE_POSITIONS:
+            self._selected_face_pos = pos
+        else:
+            raise ValueError(f'{pos} is not a valid Face position. ' +
+                    'Please provide one of the following values' + 
+                    ', '.join(FACE_POSITIONS + '.'))
+
     def del_layout_fn(self, name):
         """ Deletes layout function given its __name__ """
         # Modify flags if name refers to defaults
@@ -161,22 +215,29 @@ class TreeStyle(object):
                     self._layout_handler.remove(layout)
 
     def _update_layout_flags(self, name, status):
-        if name == 'outline':
+        if name == 'Outline':
             self.show_outline = status
-        if name == 'align_link':
+        if name == 'Aligned panel link':
             self.show_align_link = status
-        if name == 'leaf_name':
+        if name == 'Leaf name':
             self.show_leaf_name = status
-        if name == 'branch_length':
+        if name == 'Number of leaves':
+            self.show_nleaves = status
+        if name == 'Branch length':
             self.show_branch_length = status
-        if name == 'branch_support':
+        if name == 'Branch support':
             self.show_branch_support = status
 
     def _get_default_layout(self):
         layouts = []
 
         # Set clean node style
-        clean = NodeStyle()
+        try:
+            clean = NodeStyle()
+        except:
+            from ete4 import NodeStyle
+            clean = NodeStyle()
+
         clean['size'] = 0
         clean['bgcolor'] = 'transparent'
         layouts.append(lambda node: node.set_style(clean))
@@ -187,6 +248,8 @@ class TreeStyle(object):
             layouts.append(get_layout_align_link())
         if self.show_leaf_name:
             layouts.append(get_layout_leaf_name())
+        if self.show_nleaves:
+            layouts.append(get_layout_nleaves())
         if self.show_branch_length:
             layouts.append(get_layout_branch_length())
         if self.show_branch_support:

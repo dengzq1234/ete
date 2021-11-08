@@ -3,14 +3,13 @@
 import { init_menus } from "./menu.js";
 import { init_events } from "./events.js";
 import { update } from "./draw.js";
-import { download_newick, download_image, download_svg } from "./download.js";
-import { search, remove_searches } from "./search.js";
+import { download_newick, download_svg } from "./download.js";
+import { search, get_searches, remove_searches } from "./search.js";
+import { get_selections, remove_selections } from "./select.js";
 import { zoom_into_box, zoom_around, zoom_towards_box } from "./zoom.js";
 import { draw_minimap, update_minimap_visible_rect } from "./minimap.js";
 import { api, api_put, escape_html } from "./api.js";
-import { remove_tags } from "./tag.js";
 import { remove_collapsed } from "./collapse.js";
-import { label_expression, label_property } from "./label.js";
 
 export { view, menus, on_tree_change, on_drawer_change, show_minimap,
          tree_command, get_tid, on_box_click, on_box_wheel, coordinates,
@@ -39,17 +38,13 @@ const view = {
     download: {
         newick: () => download_newick(),
         svg:    () => download_svg(),
-        image:  () => download_image(),
     },
     allow_modifications: true,
 
     // representation
     drawer: {name: "RectFaces", type: "rect", npanels: 1},  // default drawer
     min_size: 15,  // for less pixels, the drawer will collapse things
-    label_expression: () => label_expression(),
-    label_property: () => label_property(),
     current_property: "name",  // pre-selected property in the add label menu
-    labels: {},  // will contain the labels created
     rmin: 0,
     angle: {min: -180, max: 180},
     align_bar: 80,  // % of the screen width where the aligned panel starts
@@ -57,12 +52,12 @@ const view = {
 
     layouts: {},
 
+    // selected
+    selected: {},  // will contain the selected nodes
+
     // searches
     search: () => search(),
     searches: {},  // will contain the searches done
-
-    // tags
-    tags: {},  // will contain the tagged nodes
 
     // info
     nnodes: 0,  // number of visible nodeboxes
@@ -105,17 +100,9 @@ const view = {
             pattern: "solid",
         },
     },
-    array: {padding: 0.0},
     font_sizes: {auto: true, fixed: 10, max: 15, scroller: {
         fixed: undefined, max: undefined
     }},
-
-    name: {  // this may go away if we can do names nicely with labels
-        color: "#00A",
-        font: "sans-serif",
-        max_size: 25,
-        padding: {left: 30, vertical: 0.20},
-    },
 
     // minimap
     minimap: {
@@ -124,6 +111,15 @@ const view = {
         width: 10,
         height: 40,
         zoom: {x: 1, y: 1},
+    },
+
+    tree_scale: {
+        show: true,
+        length: 100,
+        width: 1.5,
+        height: 10,
+        color: "#000",
+        fsize: 12,
     },
 
     smart_zoom: true,
@@ -135,7 +131,7 @@ const view = {
 
 const menus = {  // will contain the menus on the top
     pane: undefined, // main pane containing different tabs
-    tags: undefined,
+    selected: undefined,
     searches: undefined,
     collapsed: undefined,
     minimap: undefined, // minimap toggler
@@ -160,7 +156,8 @@ async function main() {
 
     init_events();
 
-    //store_node_properties();
+    get_searches();
+    get_selections();
 
     draw_minimap();
     show_minimap("visible");
@@ -228,10 +225,14 @@ async function on_tree_change() {
 
     div_tree.style.cursor = "wait";
     remove_searches();
+    remove_selections();
     remove_collapsed();
-    remove_tags();
     view.tree_size = await api(`/trees/${get_tid()}/size`);
-    //store_node_properties();
+    // Get searches and selections if any are stored in backend
+    if (Object.keys(view.searches).length === 0)
+        get_searches();
+    if (Object.keys(view.selected).length === 0)
+        get_selections();
     reset_node_count();
     reset_zoom();
     reset_position();
@@ -260,30 +261,6 @@ async function on_drawer_change() {
     }
 
     update();
-}
-
-
-// Save the available node properties in view.node_properties and the drop-down
-// list of the menu that allows to label based on properties.
-async function store_node_properties() {
-    const properties_extra = await api(`/trees/${get_tid()}/properties`);
-
-    view.node_properties = ["name", "length"].concat(properties_extra);
-
-    const select = menus.representation
-        .__folders.labels.__folders.add.__folders.properties
-        .__controllers[0].__select;  // drop-down list
-
-    while (select.length > 0)  // remove properties that may be in the list
-        select.remove(select.length - 1);
-
-    for (const p of view.node_properties) {  // add new properties to the list
-        const opt = document.createElement("option");
-        opt.value = opt.text = p;
-        select.add(opt);
-    }
-
-    view.current_property = "name";
 }
 
 
@@ -544,7 +521,7 @@ Use the options in the menu at the top right to change the visualization.
 <tr><td><kbd>/</kbd></td><td style="text-align: left">&nbsp; search</td></tr>
 <tr><td><kbd>r</kbd></td><td style="text-align: left">&nbsp; reset view</td></tr>
 <tr><td><kbd>m</kbd></td><td style="text-align: left">&nbsp; toggle minimap</td></tr>
-<tr><td><kbd>c</kbd></td><td style="text-align: left">&nbsp; toggle control panel</td></tr>
+<tr><td><kbd>p</kbd></td><td style="text-align: left">&nbsp; toggle control panel</td></tr>
 <tr><td><kbd>⬅️</kbd> <kbd>➡️</kbd> <kbd>⬆️</kbd> <kbd>⬇️</kbd></td>
     <td style="text-align: left">&nbsp; move the view</td></tr>
 <tr><td><kbd>+</kbd> <kbd>&ndash;</kbd></td>

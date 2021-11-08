@@ -3,13 +3,12 @@
 import { view, get_tid, on_box_click, on_box_wheel } from "./gui.js";
 import { update_minimap_visible_rect } from "./minimap.js";
 import { colorize_searches, get_search_class } from "./search.js";
+import { colorize_selections, get_selection_class } from "./select.js";
 import { on_box_contextmenu } from "./contextmenu.js";
-import { colorize_tags } from "./tag.js";
-import { colorize_labels } from "./label.js";
 import { api } from "./api.js";
-import { draw_msa } from "./pixi.js";
+import { draw_pixi } from "./pixi.js";
 
-export { update, draw_tree, draw, get_class_name };
+export { update, draw_tree, draw_tree_scale, draw, get_class_name, cartesian_shifted };
 
 
 // Update the view of all elements (gui, tree, minimap).
@@ -21,6 +20,8 @@ function update() {
 }
 
 
+var align_timeout; // Do not constantly render aligned panel (too costly) when scrolling
+var align_drawing = false;
 // Ask the server for a tree in the new defined region, and draw it.
 async function draw_tree() {
     const [zx, zy] = [view.zoom.x, view.zoom.y];
@@ -48,14 +49,17 @@ async function draw_tree() {
     const qs = new URLSearchParams(params).toString();  // "x=...&y=..."
 
     try {
+        clearTimeout(align_timeout);
+
         const items = await api(`/trees/${get_tid()}/draw?${qs}`);
 
         draw(div_tree, items, view.tl, view.zoom);
 
+        clearTimeout(align_timeout);
+
         view.nnodes = div_tree.getElementsByClassName("node").length;
-        colorize_labels();
-        colorize_tags();
         colorize_searches();
+        colorize_selections();
 
         const drawer_info = await api(`/drawers/${view.drawer.name}/${get_tid()}`);
         view.drawer.npanels = drawer_info.npanels; // type has already been set
@@ -65,8 +69,14 @@ async function draw_tree() {
             div_aligned.style.display = "initial";  // show aligned panel
         else
             div_aligned.style.display = "none";  // hide aligned panel
-            if (view.drawer.npanels > 1)
-                await draw_aligned(params);
+
+        if (view.drawer.npanels > 1) {
+            align_timeout = setTimeout(async () => { 
+                if (!align_drawing)
+                    await draw_aligned(params);
+                clearTimeout(align_timeout);
+            }, 200);
+        }
 
         if (view.drawer.type === "circ") {
             fix_text_orientations();
@@ -74,6 +84,8 @@ async function draw_tree() {
             if (view.angle.min < -180 || view.angle.max > 180)
                 draw_negative_xaxis();
         }
+
+        draw_tree_scale();
     }
     catch (ex) {
         Swal.fire({
@@ -83,6 +95,68 @@ async function draw_tree() {
     }
 
     div_tree.style.cursor = "auto";
+}
+
+
+// Draw tree scale depending on the horizontal zoom level
+function draw_tree_scale() {
+    function create_hz_line() {
+        const [ x1, y1 ] = [ x0, y0 ];
+        const [ x2, y2 ] = [ x1 + length, y1 ];
+        return create_svg_element("line", {
+            "x1": x1, "y1": y1,
+            "x2": x2, "y2": y2,
+            "stroke": view.tree_scale.color,
+            "stroke-width": view.tree_scale.width,
+        });
+    }
+
+    function create_vt_line(pos="right") {
+        const x = x0 + ( pos === "right" ? length : 0 );
+        const [ x1, y1 ] = [ x, y0 - height / 2];
+        const [ x2, y2 ] = [ x, y0 + height / 2 ];
+        return create_svg_element("line", {
+            "x1": x1, "y1": y1,
+            "x2": x2, "y2": y2,
+            "stroke": view.tree_scale.color,
+            "stroke-width": view.tree_scale.width,
+        });
+    }
+    
+    function create_text(text) {
+        const t = create_svg_element("text", { 
+            "font-size": view.tree_scale.fsize,
+            "fill": view.tree_scale.color,
+            x: x0 + length + 10,
+            y: y0 + height / 2,
+        });
+        t.appendChild(document.createTextNode(text));
+        return t;
+    }
+
+    // Only show when required
+    if (view.tree_scale.show)
+        tree_scale.style.display = "block";
+    else {
+        tree_scale.style.display = "none";
+        return
+    }
+
+    const length = view.tree_scale.length;
+    const height = view.tree_scale.height;
+    const [ x0, y0 ] = [ 15, 15 ];
+
+    const g = create_svg_element("g");
+    g.appendChild(create_hz_line());
+    g.appendChild(create_vt_line("left"));
+    g.appendChild(create_vt_line("right"));
+
+    // Text
+    const text = String((view.tree_scale.length / view.zoom.x).toFixed(3));
+    g.appendChild(create_text(text));
+
+
+    replace_child(tree_scale.children[0], g);
 }
 
 
@@ -102,13 +176,13 @@ function draw_negative_xaxis() {
 function draw(element, items, tl, zoom, replace=true) {
     const g = create_svg_element("g");
 
-    // SVG drawing engine
-    const svg_items = items.filter(i => i[0] !== "alignment");
+    const svg_items = items.filter(i => !i[0].includes("pixi-"));
     svg_items.forEach(item => g.appendChild(create_item(item, tl, zoom)));
-
-    // PIXI.js drawing engine
-    const pixi_items = items.filter(i => i[0] === "alignment");
-    draw_msa(g, pixi_items, "aa", true, tl, zoom);
+    
+    const pixi_items = items.filter(i => i[0].includes("pixi-"));
+    const pixi = draw_pixi(pixi_items, tl, zoom)
+    const pixi_container = view.drawer.type === "rect" ? div_aligned : div_tree;
+    replace_child(pixi_container.querySelector(".div_pixi"), pixi);
 
     put_nodes_in_background(g);
 
@@ -138,6 +212,12 @@ function put_nodes_in_background(g) {
     });
 }
 
+function replace_child(element, child) {
+    if (element.children.length)
+        element.children[0].replaceWith(child);
+    else
+        element.appendChild(child);
+}
 
 // Replace the svg that is a child of the given element (or just add if none).
 function replace_svg(element) {
@@ -158,9 +238,14 @@ async function draw_aligned(params) {
     if (view.drawer.type === "rect") {
         const qs = new URLSearchParams({...params, "panel": 1}).toString();
 
+        align_drawing = true;
+
         const items = await api(`/trees/${get_tid()}/draw?${qs}`);
 
         draw(div_aligned, items, {x: 0, y: view.tl.y}, view.zoom);
+
+        align_drawing = false;
+
         // NOTE: Only implemented for panel=1 for the moment. We just need to
         //   decide where the graphics would go for panel > 1 (another div? ...)
     }
@@ -190,10 +275,15 @@ function create_item(item, tl, zoom) {
 
         const b = create_box(box, tl, zx, zy, "", style);
 
-        b.id = "node-" + node_id.join("_");  // used in tags
+        b.id = "node-" + node_id.join("_");
 
         b.classList.add("node");
-        result_of.forEach(t => b.classList.add(get_search_class(t, "results")));
+        result_of.forEach(t => {
+            const cnode = Object.keys(view.searches).includes(t) 
+                ? get_search_class(t, "results") 
+                : get_selection_class(t, "result");
+            b.classList.add(cnode);
+        });
 
         style_nodebox(b, style)
 
@@ -480,7 +570,9 @@ function create_line(p1, p2, tl, zx, zy, type="", parent_of=[]) {
           [x2, y2] = [zx * (p2[0] - tl.x), zy * (p2[1] - tl.y)];
 
     const classes = "line " + type + " " +
-        parent_of.map(text => get_search_class(text, "parents")).join(" ");
+        parent_of.map(text => Object.keys(view.searches).includes(text)
+            ? get_search_class(text, "parents")
+            : get_selection_class(text, "parents")).join(" ");
 
     return create_svg_element("line", {
         "class": classes,
