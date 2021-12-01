@@ -736,13 +736,13 @@ def show_difftable(difftable, extended=False):
     if extended:
         for dist, b_dist, side1, side2, diff, n1, n2 in sorted(difftable, reverse=True):
             showtable.append([dist, b_dist, len(side1), len(side2), len(diff), sepstring(side1), sepstring(side2), sepstring(diff)])
-        print_table(showtable, header=["Dist", "branchDist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"],
-                    max_col_width=80, wrap_style="wrap", row_line=True)
+        # print_table(showtable, header=["Dist", "branchDist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"],
+        #             max_col_width=80, wrap_style="wrap", row_line=True)
     else:
         for dist, b_dist, side1, side2, diff, n1, n2 in sorted(difftable, reverse=True):
             showtable.append([dist, len(side1), len(side2), len(diff), sepstring(side1), sepstring(side2), sepstring(diff)])
-        print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"],
-                    max_col_width=80, wrap_style="wrap", row_line=True)
+        # print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"],
+        #             max_col_width=80, wrap_style="wrap", row_line=True)
     return showtable
 
 def show_difftable_tab(difftable, extended=None):
