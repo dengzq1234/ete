@@ -28,13 +28,17 @@ class LayoutPlot(TreeLayout):
         def update_vals(metric, node):
             p, minval, maxval, uniqvals = vals[metric]
             prop = node.props.get(p)
-            if type(prop) in [int, float]:
-                vals[metric][1] = min(minval, prop)
-                vals[metric][2] = max(maxval, prop)
-            elif prop is None:
-                return
-            else:
-                uniqvals.add(prop)
+            try:
+                prop = float(prop)
+                if type(prop) in [int, float]:
+                    vals[metric][1] = min(minval, prop)
+                    vals[metric][2] = max(maxval, prop)
+                elif prop is None:
+                    return
+                else:
+                    uniqvals.add(prop)
+            except:
+                pass
 
         vals = { 
             "size": [ self.size_prop, 0, 0, set() ],    # min, max, unique
@@ -65,7 +69,6 @@ class LayoutBarplot(LayoutPlot):
         super().__init__(name=name, width=width, size_prop=size_prop,
                 color_prop=color_prop, position=position, column=column,
                 padding_x=padding_x)
-
 
     def set_tree_style(self, tree, tree_style):
         super().set_tree_style(tree, tree_style)
