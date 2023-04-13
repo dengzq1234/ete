@@ -13,6 +13,8 @@ import math
 import tarfile
 import warnings
 
+from ete4 import ETE_DATA_HOME, update_ete_data
+
 # from ..coretype.tree  import Tree
 # from ..phylo.phylotree  import Tree
 
@@ -22,13 +24,9 @@ import warnings
 __all__ = ["GTDBTaxa", "is_taxadb_up_to_date"]
 
 DB_VERSION = 2
-DEFAULT_GTDBTAXADB = os.environ.get('XDG_DATA_HOME', os.environ['HOME'] + '/.local/share') + '/etetoolkit/gtdbtaxa.sqlite'
-DEFAULT_GTDBTAXADUMP = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gtdbdump', 'gtdbr202dump.tar.gz')
+DEFAULT_GTDBTAXADB = ETE_DATA_HOME + '/gtdbtaxa.sqlite'
+DEFAULT_GTDBTAXADUMP = ETE_DATA_HOME + '/gtdb202dump.tar.gz'
 
-# TODO: Change DEFAULT_GTDBTAXADUMP and where it is used in
-# update_taxonomy_database and/or update_db, and download it whenever
-# it is appropriate from
-# https://github.com/etetoolkit/ete-data/raw/main/gtdbdump/gtdbr202dump.tar.gz
 
 def is_taxadb_up_to_date(dbfile=DEFAULT_GTDBTAXADB):
     """Check if a valid and up-to-date gtdbtaxa.sqlite database exists
@@ -66,6 +64,11 @@ class GTDBTaxa(object):
 
         if dbfile != DEFAULT_GTDBTAXADB and not os.path.exists(self.dbfile):
             print('GTDB database not present yet (first time used?)', file=sys.stderr)
+            urlbase = ('https://github.com/etetoolkit/ete-data/raw/main'
+                       '/gtdb_taxonomy/gtdb202')
+            update_ete_data(f'{DEFAULT_GTDBTAXADB}.traverse.pkl', f'{urlbase}/gtdbtaxa.sqlite.traverse.pkl')
+            update_ete_data(f'{DEFAULT_GTDBTAXADUMP}', f'{urlbase}/gtdb202dump.tar.gz')
+
             self.update_taxonomy_database(taxdump_file=DEFAULT_GTDBTAXADUMP)
 
         if not os.path.exists(self.dbfile):
@@ -764,7 +767,9 @@ def update_db(dbfile, targz_file=None):
     t, synonyms = load_gtdb_tree_from_dump(tar)
 
     prepostorder = [int(node.name) for post, node in t.iter_prepostorder()]
-    pickle.dump(prepostorder, open(dbfile+'.traverse.pkl', "wb"), 2)
+
+    with open(dbfile+'.traverse.pkl', 'wb') as fout:
+        pickle.dump(prepostorder, fout, 2)
 
     print("Updating database: %s ..." %dbfile)
     generate_table(t)
@@ -831,12 +836,15 @@ def upload_data(dbfile):
     #     db.execute("INSERT INTO merged (taxid_old, taxid_new) VALUES (?, ?);", (taxid_old, taxid_new))
     # print()
     # db.commit()
-    for i, line in enumerate(open("taxa.tab")):
-        if i%5000 == 0 :
-            print('\rInserting taxids:      % 6d' %i, end=' ', file=sys.stderr)
-            sys.stderr.flush()
-        taxid, parentid, spname, common, rank, lineage = line.strip('\n').split('\t')
-        db.execute("INSERT INTO species (taxid, parent, spname, common, rank, track) VALUES (?, ?, ?, ?, ?, ?);", (taxid, parentid, spname, common, rank, lineage))
+
+    with open('taxa.tab') as f_taxa:
+        for i, line in enumerate(f_taxa):
+            if i % 5000 == 0:
+                print('\rInserting taxids: %8d' % i, end=' ', file=sys.stderr)
+                sys.stderr.flush()
+            taxid, parentid, spname, common, rank, lineage = line.strip('\n').split('\t')
+            db.execute(('INSERT INTO species          (taxid, parent, spname, common, rank, track) '
+                        'VALUES (?, ?, ?, ?, ?, ?)'), (taxid, parentid, spname, common, rank, lineage))
     print()
     db.commit()
 

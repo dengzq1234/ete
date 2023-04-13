@@ -5,6 +5,7 @@ from collections import deque, namedtuple
 from hashlib import md5
 from functools import cmp_to_key
 import pickle
+import logging
 
 from .. import utils
 from ..parser.newick import (
@@ -132,6 +133,15 @@ cdef class Tree(object):
     def children(self, value):
         self._children = []
         self.add_children(value)
+
+    @property
+    def id(self):
+        reversed_id = []
+        node = self
+        while node.up:
+            reversed_id.append(node.up.children.index(node))
+            node = node.up
+        return reversed_id[::-1]
 
     def _get_style(self):
         if self._img_style is None:
@@ -295,7 +305,7 @@ cdef class Tree(object):
             self.dist = value
         elif prop_name == 'support':
             self.support = value
-        elif prop_name is not None and value is not None:
+        else:
             self.props[prop_name] = value
 
     def add_props(self, **props):
@@ -310,17 +320,17 @@ cdef class Tree(object):
     # DEPRECATED #
     def add_feature(self, pr_name, pr_value):
         """Add or update a node's feature."""
-        print("\nWARNING! add_feature is DEPRECATED use add_prop instead\n")
+        logging.warning('add_feature is DEPRECATED use add_prop instead')
         self.add_prop(pr_name, pr_value)
 
     def add_features(self, **features):
         """Add or update several features."""
-        print("\nWARNING! add_features is DEPRECATED use add_props instead\n")
+        logging.warning('add_features is DEPRECATED use add_props instead')
         self.add_props(**features)
 
     def del_feature(self, pr_name):
         """Permanently deletes a node's feature."""
-        print("\nWARNING! del_feature is DEPRECATED use del_prop instead\n")
+        logging.warning('del_feature is DEPRECATED use del_prop instead')
         self.del_prop(pr_name)
     # DEPRECATED #
 

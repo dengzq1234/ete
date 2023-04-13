@@ -569,17 +569,15 @@ function create_item(g, item, tl, zoom) {
     }
     else if (item[0] === "array") {
         const [ , box, array] = item;
-        const [x0, y0, dx0, dy0] = box;
+        const [x0, y, dx0, dy] = box;
         const dx = dx0 / array.length / zx;
-
-        const [y, dy] = pad(y0, dy0, view.array.padding);
 
         const g = create_svg_element("g");
         for (let i = 0, x = x0; i < array.length; i++, x+=dx) {
             const r = view.drawer.type === "rect" ?
-                create_rect([x, y, dx, dy], tl, zx, zy) :
-                create_asec([x, y, dx, dy], tl, zx);
-            r.style.stroke = `hsl(${array[i]}, 100%, 50%)`;
+                create_rect([x, y, dx, dy], tl, zx, zy, "", {rounded: null}) :
+                create_asec([x, y, dx, dy], tl, zx, "", {id: null});
+            r.style.stroke = array[i];
             g.appendChild(r);
         }
 
@@ -635,12 +633,6 @@ function get_class_name(type) {
     return type.replace(/[^A-Za-z0-9_-]/g, '');
 }
 
-
-// Transform the interval [y0, y0+dy0] into one padded with the given fraction.
-function pad(y0, dy0, fraction) {
-    const dy = dy0 * (1 - fraction);
-    return [y0 + (dy0 - dy)/2, dy]
-}
 
 function create_legend_entry_container(entry) {
     const div = document.createElement("div");

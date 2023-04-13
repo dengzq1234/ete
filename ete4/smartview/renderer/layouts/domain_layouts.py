@@ -1,15 +1,32 @@
+import os
 import json
-from pathlib import Path
 
 from ..treelayout import TreeLayout, _TitleCase
 from ..faces import SeqMotifFace
 from ..draw_helpers import Padding
 
+from ete4.config import ETE_DATA_HOME, update_ete_data
 
-with open(Path(__file__).parent / "pfam2color.json") as handle:
+
+pfam2color_file = ETE_DATA_HOME + '/pfam2color.json'
+
+if not os.path.exists(pfam2color_file):
+    url = ('https://github.com/etetoolkit/ete-data/raw/main'
+           '/layouts/pfam2color.json')
+    update_ete_data(pfam2color_file, url)
+
+with open(pfam2color_file) as handle:
     _pfam2color = json.load(handle)
 
-with open(Path(__file__).parent / "smart2color.json") as handle:
+
+smart2color_file = ETE_DATA_HOME + '/smart2color.json'
+
+if not os.path.exists(smart2color_file):
+    url = ('https://github.com/etetoolkit/ete-data/raw/main'
+           '/layouts/smart2color.json')
+    update_ete_data(smart2color_file, url)
+
+with open(smart2color_file) as handle:
     _smart2color = json.load(handle)
 
 
@@ -38,7 +55,7 @@ class _LayoutDomains(TreeLayout):
         doms = []
         for name, start, end in dom_list:
             color = self.colormap.get(name, "lightgray")
-            dom = [int(start), int(end), "()", 
+            dom = [int(start), int(end), "()",
                    None, None, color, color,
                    "arial|20|black|%s" %(name)]
             doms.append(dom)
@@ -51,7 +68,7 @@ class _LayoutDomains(TreeLayout):
         if doms or fake_seq:
             seqFace = SeqMotifFace(seq=fake_seq, motifs=doms, width=250,
                     height=10)
-            node.add_face(seqFace, column=self.column, 
+            node.add_face(seqFace, column=self.column,
                     position="aligned",
                     collapsed_only=(not node.is_leaf()))
 
@@ -59,14 +76,14 @@ class _LayoutDomains(TreeLayout):
 def create_domain_layout(prop, name, colormap, active, column):
     # branch_right; column 2; color black
     class Layout(_LayoutDomains):
-        def __init__(self, 
-                prop=prop, 
+        def __init__(self,
+                prop=prop,
                 name=name,
                 colormap=colormap,
                 column=column,
                 *args, **kwargs):
             super().__init__(
-                    prop=prop, 
+                    prop=prop,
                     name=name,
                     colormap=colormap,
                     column=column,
@@ -81,7 +98,7 @@ def create_domain_layout(prop, name, colormap, active, column):
     return Layout
 
 
-domain_layout_args = [ 
+domain_layout_args = [
         [ "pfam",  "Pfam domains",  _pfam2color,  True  ],
         [ "smart", "Smart domains", _smart2color, False  ],
     ]
