@@ -2,7 +2,7 @@
 
 import { view, get_tid, on_box_click, on_box_wheel,
          on_box_mouseenter, on_box_mouseleave,
-         get_active_layouts } from "./gui.js";
+         get_active_layouts, tree_command, reset_view } from "./gui.js";
 import { update_minimap_visible_rect } from "./minimap.js";
 import { colorize_active, get_active_class } from "./active.js";
 import { colorize_searches, get_search_class } from "./search.js";
@@ -11,7 +11,8 @@ import { on_box_contextmenu } from "./contextmenu.js";
 import { api } from "./api.js";
 import { draw_pixi, clear_pixi } from "./pixi.js";
 
-export { update, draw_tree, draw_tree_scale, draw_aligned, draw, get_class_name, cartesian_shifted, update_aligned_panel_display };
+export { update, draw_tree, draw_tree_scale, draw_aligned, draw, get_class_name,
+         cartesian_shifted, update_aligned_panel_display };
 
 
 // Update the view of all elements (gui, tree, minimap).
@@ -50,7 +51,32 @@ var align_drawing = false;
 // Ask the server for a tree in the new defined region, and draw it.
 async function draw_tree() {
     div_tree.style.cursor = "wait";
+
     const params = get_tree_params();
+
+    // Fix the tree if it has zero width.
+    if (params.w <= 0) {
+        const result = await Swal.fire({
+            icon: "error",
+            html: `Cannot draw tree with width ${params.w}`,
+            confirmButtonText: "Convert to ultrametric (equidistant leaves)",
+            showDenyButton: true,
+            denyButtonText: "Convert to dendrogram (remove all distances)",
+            showCancelButton: true,
+        });
+
+        if (result.isConfirmed) {
+            await tree_command("to_ultrametric", []);
+            reset_view();
+        }
+        else if (result.isDenied) {
+            await tree_command("to_dendrogram", []);
+            reset_view();
+        }
+
+        return;
+    }
+
     const qs = new URLSearchParams(params).toString();  // "x=...&y=..."
 
     try {
@@ -438,9 +464,9 @@ function create_item(g, item, tl, zoom) {
         return b;
     }
     else if (item[0] === "outline") {
-        const [ , sbox, style] = item;
+        const [ , box, style] = item;
 
-        const outline = create_outline(sbox, tl, zx, zy);
+        const outline = create_outline(box, tl, zx, zy);
 
         style_outline(outline, style);
 
@@ -568,7 +594,7 @@ function create_item(g, item, tl, zoom) {
         return slice;
     }
     else if (item[0] === "array") {
-        const [ , box, array] = item;
+        const [ , box, array, tooltip] = item;
         const [x0, y, dx0, dy] = box;
         const dx = dx0 / array.length / zx;
 
@@ -577,7 +603,10 @@ function create_item(g, item, tl, zoom) {
             const r = view.drawer.type === "rect" ?
                 create_rect([x, y, dx, dy], tl, zx, zy, "", {rounded: null}) :
                 create_asec([x, y, dx, dy], tl, zx, "", {id: null});
-            r.style.stroke = array[i];
+            r.style.fill = array[i];
+            if (tooltip) {
+                r.setAttribute("data-tooltip", tooltip);
+            }
             g.appendChild(r);
         }
 
@@ -695,8 +724,8 @@ function create_continuous_legend_entry(entry) {
 
     const rect = document.createElement("span");
     rect.classList.add("legend-gradient");
-    const [c1, c2] = entry.color_range;
-    rect.style["background-image"] = `linear-gradient(${c2}, ${c1})`;
+    const colorRange = entry.color_range.join(',')
+    rect.style["background-image"] = `linear-gradient(${colorRange})`;
     rect.style["border-radius"] = "1px";
     item.appendChild(rect);
 
@@ -784,24 +813,22 @@ function cartesian_shifted(r, a, tl, z) {
 
 
 // Return an outline (collapsed version of a box).
-function create_outline(sbox, tl, zx, zy) {
+function create_outline(box, tl, zx, zy) {
     if (view.drawer.type === "rect")
-        return create_rect_outline(sbox, tl, zx, zy);
+        return create_rect_outline(box, tl, zx, zy);
     else
-        return create_circ_outline(sbox, tl, zx);
+        return create_circ_outline(box, tl, zx);
 }
 
 
 // Return a svg horizontal outline.
-function create_rect_outline(sbox, tl, zx, zy) {
-    const [x, y, dx_min, dx_max, dy] = transform_sbox(sbox, tl, zx, zy);
-
-    const dx = view.outline.slanted ? dx_min : dx_max;
+function create_rect_outline(box, tl, zx, zy) {
+    const [x, y, dx, dy] = transform_box(box, tl, zx, zy);
 
     return create_svg_element("path", {
         "class": "outline",
         "d": `M ${x} ${y + dy/2}
-              L ${x + dx_max} ${y}
+              L ${x + dx} ${y}
               L ${x + dx} ${y + dy}
               L ${x} ${y + dy/2}`,
     });
@@ -813,29 +840,21 @@ function transform_box(box, tl, zx, zy) {
     return [zx * (x - tl.x), zy * (y - tl.y), zx * dx, zy * dy];
 }
 
-// Return the sbox translated (from tl) and scaled.
-function transform_sbox(sbox, tl, zx, zy) {
-    const [x, y, dx_min, dx_max, dy] = sbox;
-    return [zx * (x - tl.x), zy * (y - tl.y), zx * dx_min, zx * dx_max, zy * dy];
-}
-
 
 // Return a svg outline in the direction of an annular sector.
-function create_circ_outline(sbox, tl, z) {
-    const [r, a, dr_min, dr_max, da] = sbox;
-
-    const dr = view.outline.slanted ? dr_min : dr_max;
+function create_circ_outline(box, tl, z) {
+    const [r, a, dr, da] = box;
 
     const large = da > Math.PI ? 1 : 0;
     const p0 = cartesian_shifted(r, a + da/2, tl, z),
-          p10 = cartesian_shifted(r + dr_max, a, tl, z),
+          p10 = cartesian_shifted(r + dr, a, tl, z),
           p11 = cartesian_shifted(r + dr, a + da, tl, z);
 
     return create_svg_element("path", {
         "class": "outline",
         "d": `M ${p0.x} ${p0.y}
               L ${p10.x} ${p10.y}
-              A ${z * (r + dr_max)} ${z * (r + dr)} 0 ${large} 1 ${p11.x} ${p11.y}
+              A ${z * (r + dr)} ${z * (r + dr)} 0 ${large} 1 ${p11.x} ${p11.y}
               L ${p0.x} ${p0.y}`,
     });
 }

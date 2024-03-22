@@ -17,23 +17,14 @@ def get_evol_events_from_leaf(node, sos_thr=0.0):
     T. Genome Biol. 2007;8(6):R109.
     """
     # Get the tree's root
-    root = node.get_tree_root()
+    root = node.root
 
-    # Checks that is actually rooted
-    outgroups = root.get_children()
-    if len(outgroups) != 2:
+    try:
+        outg1, outg2 = root.get_children()  # outgroups
+    except ValueError:
         raise TypeError("Tree is not rooted")
 
-    # Cautch the smaller outgroup (will be stored as the tree
-    # outgroup)
-    o1 = set([n.name for n in outgroups[0].get_leaves()])
-    o2 = set([n.name for n in outgroups[1].get_leaves()])
-
-    if len(o2)<len(o1):
-        smaller_outg = outgroups[1]
-    else:
-        smaller_outg = outgroups[0]
-
+    smaller_outg = outg1 if len(outg1) < len(outg2) else outg2
 
     # Prepare to browse tree from leaf to root
     all_events = []
@@ -43,18 +34,15 @@ def get_evol_events_from_leaf(node, sos_thr=0.0):
     browsed_spcs   = set([current.species])
     browsed_leaves = set([current])
     # get family Size
-    fSize =  len([n for n in root.get_leaves() if n.species == ref_spcs])
+    fSize = sum(1 for n in root.leaves() if n.species == ref_spcs)
 
     # Clean previous analysis
-    for n in root.get_descendants()+[root]:
+    for n in root.traverse():
         n.del_prop("evoltype")
 
     while current.up:
-        # distances control (0.0 distance check)
-        d = 0
         for s in current.get_sisters():
-            for leaf in s.get_leaves():
-                d += current.get_distance(leaf)
+            for leaf in s.leaves():
                 sister_leaves.add(leaf)
         # Process sister node only if there is any new sequence.
         # (previene dupliaciones por nombres repetidos)
@@ -80,7 +68,7 @@ def get_evol_events_from_leaf(node, sos_thr=0.0):
         event.inparalogs  = set([n.name for n in browsed_leaves if n.species == ref_spcs])
 
         # If species overlap: duplication
-        if score > sos_thr:# and d > 0.0: Removed branch control.
+        if score > sos_thr:
             event.node = current.up
             event.etype = "D"
             event.outparalogs = set([n.name for n in sister_leaves  if n.species == ref_spcs])
@@ -116,7 +104,7 @@ def get_evol_events_from_root(node, sos_thr):
     """
 
     # Get the tree's root
-    root = node.get_tree_root()
+    root = node.root
 
     # Checks that is actually rooted
     outgroups = root.get_children()
@@ -124,8 +112,8 @@ def get_evol_events_from_root(node, sos_thr):
         raise TypeError("Tree is not rooted")
 
     # Cautch the smaller outgroup (will be stored as the tree outgroup)
-    o1 = set([n.name for n in outgroups[0].get_leaves()])
-    o2 = set([n.name for n in outgroups[1].get_leaves()])
+    o1 = set([n.name for n in outgroups[0].leaves()])
+    o2 = set([n.name for n in outgroups[1].leaves()])
 
 
     if len(o2)<len(o1):
@@ -134,10 +122,10 @@ def get_evol_events_from_root(node, sos_thr):
         smaller_outg = outgroups[0]
 
     # Get family size
-    fSize = len( [n for n in root.get_leaves()] )
+    fSize = len( [n for n in root.leaves()] )
 
     # Clean data from previous analyses
-    for n in root.get_descendants()+[root]:
+    for n in list(root.descendants())+[root]:
         n.del_prop("evoltype")
 
     # Gets Prepared to browse the tree from root to leaves
@@ -154,10 +142,10 @@ def get_evol_events_from_root(node, sos_thr):
             pass # leaf
         else:
             # Get leaves and species at both sides of event
-            sideA_leaves= set([n for n in childs[0].get_leaves()])
-            sideB_leaves= set([n for n in childs[1].get_leaves()])
-            sideA_spcs  = set([n.species for n in childs[0].get_leaves()])
-            sideB_spcs  = set([n.species for n in childs[1].get_leaves()])
+            sideA_leaves= set([n for n in childs[0].leaves()])
+            sideB_leaves= set([n for n in childs[1].leaves()])
+            sideA_spcs  = set([n.species for n in childs[0].leaves()])
+            sideB_spcs  = set([n.species for n in childs[1].leaves()])
             # Calculates species overlap
             overlaped_spcs = sideA_spcs & sideB_spcs
             all_spcs       = sideA_spcs | sideB_spcs

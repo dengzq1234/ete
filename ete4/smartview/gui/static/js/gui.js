@@ -37,7 +37,7 @@ const view = {
         key: "(dy, dx, name)",
         reverse: false,
     },
-    upload: () => window.location.href = "upload_tree.html",
+    upload: () => window.location.href = "upload.html",
     download: {
         newick: () => download_newick(),
         svg:    () => download_svg(),
@@ -132,7 +132,6 @@ const view = {
         opacity: 0.1,
         color: "#A50",
         width: 0.5,
-        slanted: true,
     },
     line: {
         length: {
@@ -295,7 +294,10 @@ async function tree_command(command, params=undefined) {
     try {
         await api_put(`/trees/${get_tid()}/${command}`, params);
 
-        const commands_modifying_size = ["root_at", "remove", "update_props"];
+        const commands_modifying_size = [
+            "set_outgroup", "remove", "update_props", "edit",
+            "to_ultrametric", "to_dendrogram"];
+
         if (commands_modifying_size.includes(command))
             view.tree_size = await api(`/trees/${get_tid()}/size`);
     }
@@ -753,7 +755,7 @@ async function on_box_click(event, box, node_id, properties) {
             activate_node(node_id, properties, "nodes")
     }
     else if (event.shiftKey && node_id.length) {
-        const nid = get_tid() + "," + node_id;
+        const nid = get_tid() + (node_id.length > 0 ? ("," + node_id) : "");
         const active = await api(`/trees/${nid}/active`);
         if (active === "active_clade")
             deactivate_node(node_id, "clades")

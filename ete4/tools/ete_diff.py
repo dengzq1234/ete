@@ -8,9 +8,15 @@ from scipy.cluster import hierarchy as hcluster
 import random
 import itertools
 import multiprocessing as mp
-from ..coretype.tree import Tree
-from ..utils import print_table, color
-from lap import lapjv
+from ete4.core.tree import Tree
+from ete4.utils import print_table, color
+
+try:
+    from lap import lapjv
+except ImportError:
+    def lapjv(*args, **kwargs):
+        raise ValueError('lapjv could not be imported.')
+
 import textwrap
 import argparse
 import logging
@@ -50,12 +56,12 @@ def SINGLECELL(a,b,support,attr1,attr2):
     len_axb = 0
 
 
-    for leaf_a in a[0].iter_leaves():
-        for leaf_b in b[0].iter_leaves():
+    for leaf_a in a[0].leaves():
+        for leaf_b in b[0].leaves():
             len_axb += 1
             dist.append(pearson[leaf_a.name][leaf_b.name])
 
-    dist = np.percentile(dist,50)/(1 - 1 / (len([i for i in b[0].iter_leaves()])))
+    dist = np.percentile(dist,50)/(1 - 1 / (len([i for i in b[0].leaves()])))
 
     return dist
 
@@ -95,8 +101,8 @@ def EUCL_DIST_B(a,b,support,attr1,attr2):
     '''
 
 
-    dist_a = sum([descendant.dist for descendant in a[0].iter_leaves() if getattr(descendant,attr1) in(a[1] - b[1])]) / len([i for i in a[0].iter_leaves()])
-    dist_b = sum([descendant.dist for descendant in b[0].iter_leaves() if getattr(descendant,attr2) in(b[1] - a[1])]) / len([i for i in b[0].iter_leaves()])
+    dist_a = sum([descendant.dist for descendant in a[0].leaves() if descendant.props[attr1] in(a[1] - b[1])]) / len([i for i in a[0].leaves()])
+    dist_b = sum([descendant.dist for descendant in b[0].leaves() if descendant.props[attr2] in(b[1] - a[1])]) / len([i for i in b[0].leaves()])
 
     return 1 - ((float(len(a[1] & b[1])) / max(len(a[1]), len(b[1]))) + abs(dist_a - dist_b)) / 2
 
@@ -117,8 +123,8 @@ def EUCL_DIST_B_ALL(a,b,support,attr1,attr2):
     '''
 
 
-    dist_a = sum([descendant.dist for descendant in a[0].iter_leaves()]) / len([i for i in a[0].iter_leaves()])
-    dist_b = sum([descendant.dist for descendant in b[0].iter_leaves()]) / len([i for i in b[0].iter_leaves()])
+    dist_a = sum([descendant.dist for descendant in a[0].leaves()]) / len([i for i in a[0].leaves()])
+    dist_b = sum([descendant.dist for descendant in b[0].leaves()]) / len([i for i in b[0].leaves()])
 
     return 1 - ((float(len(a[1] & b[1])) / max(len(a[1]), len(b[1]))) + abs(dist_a - dist_b)) / 2
 
@@ -143,28 +149,28 @@ def EUCL_DIST_B_FULL(a,b,support,attr1,attr2):
 
 
     def _get_leaves_paths(t,attr,support):
-        leaves = t.get_leaves()
+        leaves = list(t.leaves())
         leave_branches = set()
 
         for n in leaves:
-            if n.is_root():
+            if n.is_root:
                 continue
             movingnode = n
             length = 0
             nodes = 0
-            while not movingnode.is_root():
+            while not movingnode.is_root:
                 nodes += 1
                 if support:
                     length += movingnode.dist * movingnode.support
                 else:
                     length += movingnode.dist
                 movingnode = movingnode.up
-            leave_branches.add((getattr(n,attr),length/nodes))
+            leave_branches.add((n.props[attr],length/nodes))
 
         return leave_branches
 
-    dist_a = sum([descendant[1] for descendant in _get_leaves_paths(a[0],attr1,support) if descendant[0] in(a[1] - b[1])]) / len([i for i in a[0].iter_leaves()])
-    dist_b = sum([descendant[1] for descendant in _get_leaves_paths(b[0],attr2,support) if descendant[0] in(b[1] - a[1])]) / len([i for i in b[0].iter_leaves()])
+    dist_a = sum([descendant[1] for descendant in _get_leaves_paths(a[0],attr1,support) if descendant[0] in(a[1] - b[1])]) / len([i for i in a[0].leaves()])
+    dist_b = sum([descendant[1] for descendant in _get_leaves_paths(b[0],attr2,support) if descendant[0] in(b[1] - a[1])]) / len([i for i in b[0].leaves()])
 
     return 1 - ((float(len(a[1] & b[1])) / max(len(a[1]), len(b[1]))) + abs(dist_a - dist_b)) / 2
 
@@ -374,21 +380,21 @@ def be_distance(t1,t2,support, attr1,attr2):
 
     # Get total distance from leaf to root
     def _get_leaves_paths(t,attr,support):
-        leaves = t.get_leaves()
+        leaves = list(t.leaves())
         leave_branches = set()
 
         for n in leaves:
-            if n.is_root():
+            if n.is_root:
                 continue
             movingnode = n
             length = 0
-            while not movingnode.is_root():
+            while not movingnode.is_root:
                 if support:
                     length += movingnode.dist * movingnode.support
                 else:
                     length += movingnode.dist
                 movingnode = movingnode.up
-            leave_branches.add((getattr(n,attr),length))
+            leave_branches.add((n.props[attr],length))
 
         return leave_branches
 
@@ -420,23 +426,23 @@ def cc_distance(t1,t2,support,attr1,attr2):
     '''
     def cophenetic_compared_matrix(t_source,t_compare,attr1,attr2,support):
 
-        leaves = t_source.get_leaves()
-        paths = {getattr(x,attr1): set() for x in leaves}
+        leaves = list(t_source.leaves())
+        paths = {x.props[attr1]: set() for x in leaves}
 
         # get the paths going up the tree
         # we get all the nodes up to the last one and store them in a set
 
         for n in leaves:
-            if n.is_root():
+            if n.is_root:
                 continue
             movingnode = n
-            while not movingnode.is_root():
-                paths[getattr(n,attr1)].add(movingnode)
+            while not movingnode.is_root:
+                paths[n.props[attr1]].add(movingnode)
                 movingnode = movingnode.up
 
         # We set the paths for leaves not in the source tree as empty to indicate they are non-existent
 
-        for i in (set(getattr(x,attr2) for x in t_compare.get_leaves()) - set(getattr(x,attr1) for x in t_source.get_leaves())):
+        for i in (set(x.props[attr2] for x in t_compare.leaves()) - set(x.props[attr1] for x in t_source.leaves())):
             paths[i] = set()
 
         # now we want to get all pairs of nodes using itertools combinations. We need AB AC etc but don't need BA CA
@@ -481,36 +487,37 @@ def sepstring(items, sep=", "):
 
 ### Treediff ###
 
-def treediff(t1, t2, attr1 = 'name', attr2 = 'name', dist_fn=EUCL_DIST, support=False, reduce_matrix=False,extended=None, jobs=1, parallel=None):
-    '''
-    Main function of ETE-diff module.
-    Compares two trees and returns a list of differences for each node from the reference tree
+def treediff(t1, t2, prop1='name', prop2='name', dist_fn=EUCL_DIST,
+             support=False, reduce_matrix=False, extended=None,
+             jobs=1, parallel=None):
+    """Return a list of differences for each node of the given trees.
 
-    Parameters:
-        t1: reference tree, as tree object
-        t2: target tree, as tree object
-        attr1: observed attribute for the reference node, as string
-        attr2: observed attribute for the target node, as string
-        dist_fn: distance function that will be used to calculate the distances between nodes, as python function
-        support: whether to use support values for the different calculations, as boolean
-        reduce_matrix: whether to reduce the distances matrix removing columns and rows where observations equal to 0 (perfect matches) are found, as boolean
-        extended: whether to use an extension function, as python function
-        jobs: maximum number of parallel jobs to use if parallel argument is given, as integer
-        parallel: parallelization method, as string. Options are:
-            async for asyncronous parallelization
-            sync for asyncronous parallelization
+    Each entry of the returned list contains a list with:
 
+    * distance, as a float
+    * extended distance, as a float (-1 if not calculated)
+    * observed properties on reference node, as a set
+    * observed properties on target node, as a set
+    * observed properties disfferent between both nodes, as a set
+    * reference node, as a tree object
+    * target node, as a tree object
 
-    Returns:
-        list where each entry contains a list with:
-            distance, as float
-            extended distance, as float (-1 if not calculated)
-            observed attributes on reference node, as set
-            observed attributes on target node, as set
-            observed attributes disfferent between both nodes, as set
-            reference node, as tree object
-            target node, as tree object
-    '''
+    :param t1: Reference tree, as a tree object.
+    :param t2: Target tree, as a tree object.
+    :param prop1: Observed property for the reference node, as a string.
+    :param prop2: Observed property for the target node, as a string.
+    :param dist_fn: Distance function that will be used to calculate
+        the distances between nodes, as a python function.
+    :param support: If True, use support values for the different calculations.
+    :param reduce_matrix: If True, reduce the distances matrix
+        removing columns and rows where observations equal to 0
+        (perfect matches) are found.
+    :param extended: Function to get the extended distance.
+    :param jobs: Maximum number of parallel jobs to use if parallel
+        argument is given.
+    :param parallel: Parallelization method. Can be 'async' for
+        asyncronous parallelization, 'sync` for synchronous, or None.
+    """
     log = logging.getLogger()
     log.info("Computing distance matrix...")
 
@@ -518,9 +525,9 @@ def treediff(t1, t2, attr1 = 'name', attr2 = 'name', dist_fn=EUCL_DIST, support=
         n.add_prop('_nid', index)
     for index, n in enumerate(t2.traverse('preorder')):
         n.add_prop('_nid', index)
-    t1_cached_content = t1.get_cached_content(store_attr=attr1)
+    t1_cached_content = t1.get_cached_content(prop1)
     t1 = None
-    t2_cached_content = t2.get_cached_content(store_attr=attr2)
+    t2_cached_content = t2.get_cached_content(prop2)
     t2 = None
 
     if dist_fn != SINGLECELL:
@@ -539,12 +546,12 @@ def treediff(t1, t2, attr1 = 'name', attr2 = 'name', dist_fn=EUCL_DIST, support=
 
     if parallel == 'sync':
         pool = mp.Pool(jobs)
-        gen = [[pool.apply(dist_fn,args=((n1,x),(n2,y),support,attr1,attr2)) for n2,y in parts2] for n1,x in parts1]
+        gen = [[pool.apply(dist_fn,args=((n1,x),(n2,y),support,prop1,prop2)) for n2,y in parts2] for n1,x in parts1]
         pool.close()
 
     elif parallel == 'async':
         pool = mp.Pool(jobs)
-        gen = [[pool.apply_async(dist_fn,args=((n1,x),(n2,y),support,attr1,attr2)) for n2,y in parts2] for n1,x in parts1]
+        gen = [[pool.apply_async(dist_fn,args=((n1,x),(n2,y),support,prop1,prop2)) for n2,y in parts2] for n1,x in parts1]
         pool.close()
 
         for i, subgen in enumerate(gen):
@@ -552,7 +559,7 @@ def treediff(t1, t2, attr1 = 'name', attr2 = 'name', dist_fn=EUCL_DIST, support=
                 gen[i][j] = element.get()
 
     else:
-        gen = ((dist_fn((n1,x),(n2,y),support,attr1,attr2) for n2,y in parts2) for n1,x in parts1)
+        gen = ((dist_fn((n1,x),(n2,y),support,prop1,prop2) for n2,y in parts2) for n1,x in parts1)
 
     matrix = np.empty([len(parts1),len(parts2)],dtype=np.float32)
     for i, subgen in enumerate(gen):
@@ -602,7 +609,7 @@ def treediff(t1, t2, attr1 = 'name', attr2 = 'name', dist_fn=EUCL_DIST, support=
             c = cols[r]
 
             if extended:
-                b_dist = extended(parts1[r][0], parts2[c][0],support,attr1,attr2)
+                b_dist = extended(parts1[r][0], parts2[c][0],support,prop1,prop2)
             else:
                 pass
 
@@ -621,12 +628,12 @@ def treediff(t1, t2, attr1 = 'name', attr2 = 'name', dist_fn=EUCL_DIST, support=
             if np.percentile(matrix,5) >= matrix[r][c]:
 
                 if extended:
-                    b_dist = extended(parts1[r][0], parts2[c][0],attr1,attr2,support)
+                    b_dist = extended(parts1[r][0], parts2[c][0],prop1,prop2,support)
                 else:
                     pass
 
                 dist, side1, side2, diff, n1, n2 = (matrix[r][c],
-                                                    [l.name for l in parts1[r][0].iter_leaves()], [l.name for l in parts2[r][0].iter_leaves()],
+                                                    [l.name for l in parts1[r][0].leaves()], [l.name for l in parts2[r][0].leaves()],
                                                     parts1[r][1].symmetric_difference(parts2[c][1]),
                                                     parts1[r][0], parts2[c][0])
                 difftable.append([dist, b_dist, side1, side2, diff, n1, n2])
@@ -772,18 +779,18 @@ def show_difftable_topo(difftable, attr1, attr2, usecolor=False, extended=None):
     total_dist = 0
     for dist, b_dist, side1, side2, diff, n1, n2 in sorted(difftable, reverse=True):
         total_dist += dist
-        n1 = Tree(n1.write(properties=[attr1]))
-        n2 = Tree(n2.write(properties=[attr2]))
+        n1 = Tree(n1.write(props=[attr1]))
+        n2 = Tree(n2.write(props=[attr2]))
         n1.ladderize()
         n2.ladderize()
-        for leaf in n1.iter_leaves():
-            leaf.name = getattr(leaf, attr1)
+        for leaf in n1.leaves():
+            leaf.name = leaf.props[attr1]
             if leaf.name in diff:
                 leaf.name += " ***"
                 if usecolor:
                     leaf.name = color(leaf.name, "red")
-        for leaf in n2.iter_leaves():
-            leaf.name = getattr(leaf, attr2)
+        for leaf in n2.leaves():
+            leaf.name = leaf.props[attr2]
             if leaf.name in diff:
                 leaf.name += " ***"
                 if usecolor:
@@ -1128,8 +1135,8 @@ def run(args):
         if args.ref_trees and args.src_trees:
             rtree = args.ref_trees[0]
             ttree = args.src_trees[0]
-            t1 = Tree(rtree,format=args.ref_newick_format)
-            t2 = Tree(ttree,format=args.src_newick_format)
+            t1 = Tree(open(rtree), parser=args.ref_newick_format)
+            t2 = Tree(open(ttree), parser=args.src_newick_format)
 
         elif args.rmatrix and args.tmatrix:
             sepdict = {'tsv' : "\t", "csv" : ","}
@@ -1144,10 +1151,10 @@ def run(args):
 
         if args.ncbi:
 
-            taxids = set([getattr(leaf, rattr) for leaf in t1.iter_leaves()])
-            taxids.update([getattr(leaf, tattr) for leaf in t2.iter_leaves()])
+            taxids = set([leaf.props[rattr] for leaf in t1.leaves()])
+            taxids.update([leaf.props[tattr] for leaf in t2.leaves()])
             taxid2name = ncbi.get_taxid_translator(taxids)
-            for leaf in  t1.get_leaves()+t2.get_leaves():
+            for leaf in list(t1.leaves()) + list(t2.leaves()):
                 try:
                     leaf.name=taxid2name.get(int(leaf.name), leaf.name)
                 except ValueError:
@@ -1166,11 +1173,11 @@ def run(args):
 
             pearson = pearson_corr(rdict,tdict)
 
-            for leaf in t1.iter_leaves():
+            for leaf in t1.leaves():
                 # we can't pass dicts or lists due to an incompatibility with get_cached_content so we give a string and then parse it
                 leaf.pearson=json.dumps(pearson)
 
-            for leaf in t2.iter_leaves():
+            for leaf in t2.leaves():
                 # we can't pass dicts or lists due to an incompatibility with get_cached_content so we give a string and then parse it
                 leaf.pearson=json.dumps(pearson)
 

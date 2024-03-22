@@ -5,14 +5,25 @@ import os
 import errno
 
 TOOLSPATH = os.path.realpath(os.path.split(os.path.realpath(__file__))[0])
-#sys.path.insert(0, TOOLSPATH)
-#sys.path.insert(1, TOOLSPATH.replace("ete3/tools", ''))
-#print sys.path
 
 import argparse
-from . import (ete_split, ete_expand, ete_annotate, ete_ncbiquery, ete_view,
-               ete_generate, ete_mod, ete_extract, ete_compare, ete_evol,
+from . import (ete_split, ete_expand, ete_annotate, ete_ncbiquery,
+               ete_generate, ete_mod, ete_extract, ete_compare,
                ete_maptrees, ete_diff, ete_explore)
+try:
+    from . import ete_view, ete_evol
+except ImportError:
+    class DummyNamespace:
+        pass
+    ete_view = DummyNamespace()
+    ete_view.DESC = "Treeview module not available. It requires Qt."
+    ete_view.populate_args = lambda args: None
+    ete_view.run = lambda args: None
+    ete_evol = DummyNamespace()
+    ete_evol.DESC = "ete_evol module not available. It requires Qt."
+    ete_evol.populate_args = lambda args: None
+    ete_evol.run = lambda args: None
+
 from . import common
 from .common import log
 from .utils import colorify, which
@@ -101,7 +112,7 @@ def _main(arguments):
             ete_path = which("ete4")
 
             if ete_path:
-                builtin_apps_path = os.path.join(os.path.split(ete_path)[0], "ete3_apps/bin")
+                builtin_apps_path = os.path.join(os.path.split(ete_path)[0], "ete4_apps/bin")
             ete_build._main(arguments, builtin_apps_path)
 
             return

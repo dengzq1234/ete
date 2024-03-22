@@ -33,10 +33,10 @@ async function on_box_contextmenu(event, box, name, properties, node_id=[]) {
     div_contextmenu.innerHTML = "";
 
     if (box) {
-        const name_text = ": " + (name.length < 20 ? name :
+        const name_text = ": " + (name === null || name.length < 20 ? name :
                                   (name.slice(0, 8) + "..." + name.slice(-8)));
 
-        add_label("Node" + (name.length > 0 ? name_text : ""));
+        add_label("Node" + (name !== null && name.length > 0 ? name_text : ""));
 
         add_button("Zoom into branch <span>Dblclick</span>", () => zoom_into_box(box),  "", "zoom");
 
@@ -79,7 +79,7 @@ async function add_node_options(box, name, properties, node_id) {
     add_button("Download branch as newick", () => download_newick(node_id),
                "Download subtree starting at this node as a newick file.",
                "download", false);
-    const nid = get_tid() + "," + node_id;
+    const nid = get_tid() + (node_id.length > 0 ? ("," + node_id) : "");
     const nseq = Number(await api(`/trees/${nid}/nseq`));
     if (nseq > 0)
         add_button("Download " + (nseq === 1 ? "sequence" : `leaf sequences (${nseq})`),
@@ -268,12 +268,38 @@ async function add_node_modifying_options(properties, nodestyle, node_id) {
         add_json_editor(nid, nodestyle, "update_nodestyle", false, "style", html)},
        "Edit the style of this node. Changes the tree structure.",
        "edit", false);
-    if (!view.subtree) {
-        add_button("Root on this node", async () => {
-            await tree_command("root_at", node_id);
+    add_button("Rename node", async () => {
+        const result = await Swal.fire({
+            input: "text",
+            inputPlaceholder: "Enter new name",
+            preConfirm: async name => {
+                return await tree_command("rename", [node_id, name]);
+            },
+        });
+        if (result.isConfirmed)
+            update();
+    }, "Change the name of this node. Changes the tree structure.",
+       "edit", true);
+    add_button("Edit node", async () => {
+        const result = await Swal.fire({
+            input: "text",
+            inputPlaceholder: "Enter content (in newick format)",
+            preConfirm: async content => {
+                return await tree_command("edit", [node_id, content]);
+            },
+        });
+        if (result.isConfirmed) {
             draw_minimap();
             update();
-        }, "Set this node as the root of the tree. Changes the tree structure.",
+        }
+    }, "Edit the content of this node. Changes the tree structure.",
+       "edit", true);
+    if (!view.subtree) {
+        add_button("Set node as outgroup", async () => {
+            await tree_command("set_outgroup", node_id);
+            draw_minimap();
+            update();
+        }, "Set this node as the 1st child of the root. Changes the tree structure.",
            "root", true);
     }
     add_button("Move branch up", async () => {

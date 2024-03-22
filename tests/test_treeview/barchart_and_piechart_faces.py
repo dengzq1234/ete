@@ -1,11 +1,13 @@
 import sys
 import random
-from ... import Tree, faces, TreeStyle, COLOR_SCHEMES
 
-schema_names = COLOR_SCHEMES.keys()
+from ete4 import Tree
+from ete4.treeview import faces, TreeStyle, COLOR_SCHEMES
+
+schema_names = sorted(COLOR_SCHEMES.keys())
 
 def layout(node):
-    if node.is_leaf():
+    if node.is_leaf:
         F= faces.PieChartFace([10,10,10,10,10,10,10,10,10,4,6],
                               colors=COLOR_SCHEMES["set3"],
                               width=50, height=50)

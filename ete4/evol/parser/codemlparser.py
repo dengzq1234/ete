@@ -29,25 +29,25 @@ def parse_rst(path):
     for line in open(path):
         # get number of classes of sites
         if line.startswith ('dN/dS '):
-            k = int(re.sub ('.* \(K=([0-9]+)\)\n', '\\1', line))
+            k = int(re.sub (r'.* \(K=([0-9]+)\)\n', '\\1', line))
             continue
         # get values of omega and proportions
         if typ is None and \
-           re.match ('^[a-z]+.*(\d+\.\d{5} *){'+ str(k) +'}', line):
+           re.match (r'^[a-z]+.*(\d+\.\d{5} *){'+ str(k) +'}', line):
             var = re.sub (':', '', line.split('  ')[0])
             if var.startswith ('p'):
                 var = 'proportions'
-            classes[var] = [float(v) for v in re.findall('\d+\.\d{5}', line)]
+            classes[var] = [float(v) for v in re.findall(r'\d+\.\d{5}', line)]
             continue
         # parse NEB and BEB tables
         if '(BEB)' in line :
-            k = int(re.sub('.*for (\d+) classes.*\n', '\\1', line))
+            k = int(re.sub(r'.*for (\d+) classes.*\n', '\\1', line))
             typ = 'BEB'
             sites[typ] = {}
             n_classes[typ] = k
             continue
         if '(NEB)' in line :
-            k = int(re.sub('.*for (\d+) classes.*\n', '\\1', line))
+            k = int(re.sub(r'.*for (\d+) classes.*\n', '\\1', line))
             typ = 'NEB'
             sites[typ] = {}
             n_classes[typ] = k
@@ -65,16 +65,16 @@ def parse_rst(path):
         sites[typ].setdefault ('aa', []).append (line[1])
         # get site class probability
         probs = []
-        for i in range (k):
+        for i in range(k):
             probs.append (float (line[2+i]))
-            sites [typ].setdefault ('p'+str(i), []).append (float (line[2+i]))
-        sites [typ].setdefault ('pv', []).append (max (probs))
+            sites [typ].setdefault('p' + str(i), []).append(float(line[2+i]))
+        sites [typ].setdefault ('pv', []).append (max(probs))
         # get most likely site class
         classe = int (line [3 + i])
-        sites[typ].setdefault ('class', []).append (classe)
+        sites[typ].setdefault ('class', []).append(classe)
         # if there, get omega and error
         try:
-            sites [typ].setdefault ('w' , []).append (float (line [4 + i]))
+            sites [typ].setdefault('w' , []).append(float (line [4 + i]))
         except IndexError:
             # in this case we are with branch-site A or A1 and we should sum
             # probabilities of categories 2a and 2b
@@ -172,7 +172,7 @@ def parse_paml (pamout, model):
     # if we do not have tree, load it
     if model._tree is None:
         from ..evol import EvolTree
-        model._tree = EvolTree (re.findall ('\(.*\);', ''.join(all_lines))[2])
+        model._tree = EvolTree (re.findall (r'\(.*\);', ''.join(all_lines))[2])
         model._tree._label_as_paml()
     # starts parsing
     for i, line in enumerate (all_lines):
@@ -182,7 +182,7 @@ def parse_paml (pamout, model):
         if line.startswith('Codon frequencies under model'):
             model.stats ['codonFreq'] = []
             for j in range (16):
-                line = list(map (float, re.findall ('\d\.\d+', all_lines [i+j+1])))
+                line = list(map (float, re.findall (r'\d\.\d+', all_lines [i+j+1])))
                 model.stats ['codonFreq'] += [line]
             continue
         if line.startswith('Nei & Gojobori 1986'):
@@ -195,32 +195,32 @@ def parse_paml (pamout, model):
         # lnL and number of parameters
         if line.startswith ('lnL'):
             try:
-                line = re.sub ('.* np: *(\d+)\): +(-\d+\.\d+).*',
+                line = re.sub (r'.* np: *(\d+)\): +(-\d+\.\d+).*',
                                '\\1 \\2', line)
                 model.stats ['np' ] = int   (line.split()[0])
                 model.stats ['lnL'] = float (line.split()[1])
             except ValueError:
-                line = re.sub ('.* np: *(\d+)\): +(nan).*',
+                line = re.sub (r'.* np: *(\d+)\): +(nan).*',
                                '\\1 \\2', line)
                 model.stats ['np' ] = int   (line.split()[0])
                 model.stats ['lnL'] = float ('-inf')
             continue
         # get labels of internal branches
         if line.count('..') >= 2:
-            labels = re.findall ('\d+\.\.\d+', line + ' ')
+            labels = re.findall (r'\d+\.\.\d+', line + ' ')
             _check_paml_labels (model._tree, labels, pamout, model)
             continue
         # retrieve kappa
         if line.startswith ('kappa '):
             try:
-                model.stats ['kappa'] = float (re.sub ('.*(\d+\.\d+).*',
+                model.stats ['kappa'] = float (re.sub (r'.*(\d+\.\d+).*',
                                                        '\\1', line))
             except ValueError:
                 model.stats ['kappa'] = 'nan'
         # retrieve dS dN t w N S and if present, errors. from summary table
         if line.count('..') == 1 and line.startswith (' '):
-            if not re.match (' +\d+\.\.\d+ +\d+\.\d+ ', line):
-                if re.match (' +( +\d+\.\d+){8}', all_lines [i+1]):
+            if not re.match (r' +\d+\.\.\d+ +\d+\.\d+ ', line):
+                if re.match (r' +( +\d+\.\d+){8}', all_lines [i+1]):
                     _get_values (model, line.split ()[0]+'  '+all_lines [i+1])
                 continue
             _get_values (model, line)
@@ -292,7 +292,7 @@ def _get_labels_from_paml (tree, relations, pamout, model):
     tree.add_prop ('node_id', int (len (tree) + 1))
     # label other internal nodes
     for node in tree.traverse(strategy='postorder'):
-        if node.is_root(): continue
+        if node.is_root: continue
         paml_id = next(filter(lambda x: x[1]==node.props.get('node_id'), relations))[0]
         old2new[node.up.props.get('node_id')] = paml_id
         node.up.add_prop('node_id', paml_id)

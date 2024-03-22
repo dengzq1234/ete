@@ -53,8 +53,8 @@ def populate_args(mod_args_p):
 def run(args):
     from .. import Tree
 
-    for nw in src_tree_iterator(args):
-        t = Tree(nw)
+    for ftree in src_tree_iterator(args):
+        t = Tree(open(ftree))
         mod_tree(t, args)
         dump(t)
 
@@ -88,7 +88,7 @@ def mod_tree(t, args):
         t.sort_descendants()
 
     if args.ultrametric:
-        t.convert_to_ultrametric()
+        t.to_ultrametric()
 
     # remove, prune branches
     # ncbi_root

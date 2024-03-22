@@ -11,8 +11,18 @@ from warnings import warn
 
 from .utils import which, colorify
 from ..evol.control import PARAMS, AVAIL, PARAMS_DESCRIPTION
-from .. import EvolTree, random_color, add_face_to_node, TextFace, TreeStyle
-from ..treeview.layouts import evol_clean_layout
+from ete4 import EvolTree
+from ete4.utils import random_color
+from ete4.treeview import TextFace, TreeStyle
+
+try:
+    from ..treeview.layouts import evol_clean_layout
+except:
+    pass
+    # Will fail later on when trying to use that layout, but that's
+    # what you get for importing things from treeview! Better update
+    # to smartview.
+
 from ..evol import Model
 
 DESC = ("Run/Load evolutionary tests, store results in a given oputput folder\n"
@@ -255,23 +265,21 @@ def marking_layout(node):
     label_face.margin_top = 2
     label_face.margin_bottom = 2
 
-    add_face_to_node(label_face, node, column=0, position="branch-right")
+    node.add_face(label_face, column=0, position="branch-right")
 
-    if node.is_leaf():
-        add_face_to_node(TextFace(" %s" %node.name, ftype="courier",
-                                  fgcolor="#666666"), node, column=10,
-                         position="branch-right")
+    if node.is_leaf:
+        node.add_face(TextFace(" %s" % node.name, ftype="courier", fgcolor="#666666"),
+                      column=10, position="branch-right")
     else:
-        add_face_to_node(TextFace(" %s" %node.name, fsize=8, ftype="courier",
-                                  fgcolor="#666666"), node, column=0,
-                         position="branch-top")
+        node.add_face(TextFace(" %s" % node.name, fsize=8, ftype="courier", fgcolor="#666666"),
+                      column=0, position="branch-top")
 
 
 def clean_tree(tree):
     """
     remove marks from tree
     """
-    for n in tree.get_descendants() + [tree]:
+    for n in tree.traverse():
         n.mark = ''
 
 
@@ -307,10 +315,10 @@ def update_marks_from_args(nodes, marks, tree, args):
                                                       subgroup else '@;;@')
                         node1 = get_node(tree, node1)
                         node2 = get_node(tree, node2)
-                        anc = tree.get_common_ancestor(node1, node2)
+                        anc = tree.common_ancestor([node1, node2])
                         # mark from ancestor
                         if '@;;;@' in subgroup:
-                            for node in anc.get_descendants() + [anc]:
+                            for node in anc.traverse():
                                 marks[-1].append('#' + str(mark))
                                 nodes[-1].append(node.node_id)
                         # mark at ancestor
@@ -326,16 +334,16 @@ def update_marks_from_args(nodes, marks, tree, args):
     if args.mark_leaves:
         if args.mark:
             exit('ERROR: incompatible marking options')
-        marks.extend([['#1'] for n in tree.iter_leaves()])
-        nodes.extend([[n.node_id] for n in tree.iter_leaves()])
+        marks.extend([['#1'] for n in tree.leaves()])
+        nodes.extend([[n.node_id] for n in tree.leaves()])
     # mark all internal branches successively
     if args.mark_internals:
         if args.mark:
             exit('ERROR: incompatible marking options')
-        marks.extend([['#1' for _ in n.iter_descendants()]
-                      for n in tree.iter_descendants() if not n.is_leaf()])
-        nodes.extend([[n2.node_id for n2 in n.iter_descendants()]
-                      for n in tree.iter_descendants() if not n.is_leaf()])
+        marks.extend([['#1' for _ in n.descendants()]
+                      for n in tree.descendants() if not n.is_leaf])
+        nodes.extend([[n2.node_id for n2 in n.descendants()]
+                      for n in tree.descendants() if not n.is_leaf])
     # remove duplicated marks
     remove_duplicated_marks(nodes, marks, tree)
     # use the GUI
@@ -381,7 +389,7 @@ def interactive_mark(tree, mode='new'):
     tree._set_mark_mode(True)
     tree.show(tree_style=ts)
     tree._set_mark_mode(False)
-    for n in tree.iter_descendants():
+    for n in tree.descendants():
         if n.mark:
             submarks.append(n.mark)
             subnodes.append(n.node_id)
@@ -399,7 +407,7 @@ def remove_duplicated_marks(nodes, marks, tree):
     for bad in bads[::-1]:
         warn('WARNING: removing duplicated mark %s' % (
             ' '.join(['%s%s' % (
-                tree.get_descendant_by_node_id(nodes[bad][n]).write(format=9),
+                tree.get_descendant_by_node_id(nodes[bad][n]).write(parser=9),
                 marks[bad][n])
                       for n in range(len(nodes[bad]))])))
         del(marks[bad])
@@ -411,7 +419,7 @@ def name_model(tree, base_name):
     transform the name string into summary of its name and a digestion of the
     full name
     """
-    return base_name[:12] + '~' + md5((tree.get_topology_id(attr="name") +
+    return base_name[:12] + '~' + md5((tree.get_topology_id("name") +
                                        base_name).encode('utf8')).hexdigest()
 
 
@@ -808,7 +816,7 @@ def run(args):
         except TypeError:
             args.models = ['XX.' + os.path.split(args.config_file)[1]]
     for nw in args.src_tree_iterator:
-        tree = EvolTree(reformat_nw(nw), format=1)
+        tree = EvolTree(reformat_nw(nw), parser=1)
         if args.clear_tree:
             nodes, marks = [], []
         else:
@@ -822,15 +830,15 @@ def run(args):
         if args.node_ids:
             print('\n%-7s : %s' % ("Node ID", "Leaf name"))
             print('-'*50)
-            for n in tree.iter_leaves():
+            for n in tree.leaves():
                 print('   %-4s : %s' % (n.node_id, n.name))
             print('\n%-7s : %s' % ("Node ID", "Descendant leaves names"))
             print('-'*50)
-            for n in tree.iter_descendants():
-                if n.is_leaf():
+            for n in tree.descendants():
+                if n.is_leaf:
                     continue
                 print('   %-4s : %s' % (n.node_id, ', '.join(
-                    [l.name for l in n.iter_leaves()])))
+                    [l.name for l in n.leaves()])))
             print('\n   %-4s : %s' % (tree.node_id, 'ROOT'))
             return
 

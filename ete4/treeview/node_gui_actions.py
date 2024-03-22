@@ -1,7 +1,7 @@
 from functools import partial
 
 from .qt import Qt, QDialog, QMenu, QCursor, QInputDialog
-from .svg_colors import random_color
+from ..utils import random_color
 from . import  _show_newick
 from ..evol import EvolTree
 
@@ -14,25 +14,25 @@ class NewickDialog(QDialog):
         f = int(self._conf.nwFormat.currentText())
 
         if self._conf.useAllFeatures.isChecked():
-            features = []
+            props = None
         elif self._conf.features_list.count() == 0:
-            features = None
+            props = []
         else:
-            features = set()
+            props = set()
             for i in range(self._conf.features_list.count()):
-                features.add(str(self._conf.features_list.item(i).text()))
+                props.add(str(self._conf.features_list.item(i).text()))
 
-        nw = self.node.write(format=f, features=features)
+        nw = self.node.write(parser=f, props=props)
         self._conf.newickBox.setText(nw)
 
-    def add_feature(self):
+    def add_prop(self):
         aName = str(self._conf.attrName.text()).strip()
-        if aName != '' and not self._conf.features_list.findItems(aName, Qt.MatchCaseSensitive):
+        if aName != '' and not self._conf.features_list.findItems(aName, Qt.MatchFlag.MatchCaseSensitive):
             self._conf.features_list.addItem(aName)
             self.update_newick()
 
 
-    def del_feature(self):
+    def del_prop(self):
         r = self._conf.features_list.currentRow()
         self._conf.features_list.takeItem(r)
         self.update_newick()
@@ -45,23 +45,23 @@ class NewickDialog(QDialog):
 
 
 
-class _NodeActions(object):
+class _NodeActions:
     """ Used to extend QGraphicsItem features """
     def __init__(self):
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAcceptHoverEvents(True)
 
     def mouseReleaseEvent(self, e):
         if not self.node:
             return
 
-        if e.button() == Qt.RightButton:
+        if e.button() == Qt.MouseButton.RightButton:
             self.showActionPopup()
-        elif e.button() == Qt.LeftButton:
+        elif e.button() == Qt.MouseButton.LeftButton:
             self.scene().view.set_focus(self.node)
 
-            if isinstance(self.node, EvolTree) and self.node.get_tree_root()._is_mark_mode():
-                root = self.node.get_tree_root()
+            if isinstance(self.node, EvolTree) and self.node.root._is_mark_mode():
+                root = self.node.root
                 all_marks = set([getattr(n, "mark", '').replace('#', '').strip()
                                  for n in root.traverse() if n is not self.node])
                 all_marks.discard('')
@@ -121,7 +121,7 @@ class _NodeActions(object):
         contextMenu.addAction( "Delete partition", self.detach_node)
         contextMenu.addAction( "Populate subtree", self.populate_partition)
         contextMenu.addAction( "Add children", self.add_children)
-        contextMenu.addAction( "Swap branches", self.swap_branches)
+        contextMenu.addAction( "Reverse branches", self.reverse_branches)
         if self.node.img_style["draw_descendants"] == False:
             contextMenu.addAction( "Open", self.toggle_collapse)
         else:
@@ -134,7 +134,7 @@ class _NodeActions(object):
             contextMenu.addAction( "Extract", self.set_start_node)
 
         if isinstance(self.node, EvolTree):
-            root = self.node.get_tree_root()
+            root = self.node.root
             all_marks = set([getattr(n, "mark", '').replace('#', '').strip()
                              for n in root.traverse() if n is not self.node])
             all_marks.discard('')
@@ -158,7 +158,7 @@ class _NodeActions(object):
 
 
         contextMenu.addAction( "Show newick", self.show_newick)
-        contextMenu.exec_(QCursor.pos())
+        contextMenu.exec(QCursor.pos())
 
     def _gui_mark_node(self, mark=None):
         if not mark:
@@ -176,13 +176,13 @@ class _NodeActions(object):
 
     def _gui_mark_group(self, mark=None):
         self.node.mark_tree([self.node.node_id], marks=[mark])
-        for leaf in self.node.iter_descendants():
+        for leaf in self.node.descendants():
             leaf.mark_tree([leaf.node_id], marks=[mark])
         self.scene().GUI.redraw()
 
     def _gui_unmark_group(self):
         self.node.mark = ""
-        for leaf in self.node.iter_descendants():
+        for leaf in self.node.descendants():
             leaf.mark = ""
         self.scene().GUI.redraw()
 
@@ -191,7 +191,7 @@ class _NodeActions(object):
         d._conf = _show_newick.Ui_Newick()
         d._conf.setupUi(d)
         d.update_newick()
-        d.exec_()
+        d.exec()
         return False
 
     def delete_node(self):
@@ -202,12 +202,13 @@ class _NodeActions(object):
         self.node.detach()
         self.scene().GUI.redraw()
 
-    def swap_branches(self):
-        self.node.swap_children()
+    def reverse_branches(self):
+        self.node.reverse_children()
         self.scene().GUI.redraw()
 
     def add_children(self):
-        n,ok = QInputDialog.getInteger(None,"Add childs","Number of childs to add:",1,1)
+        n, ok = QInputDialog.getInt(None, "Add childs",
+                                    "Number of childs to add:", 1, 1)
         if ok:
             for i in range(n):
                 ch = self.node.add_child()
@@ -239,10 +240,10 @@ class _NodeActions(object):
             self.scene().GUI.redraw()
 
     def populate_partition(self):
-        n, ok = QInputDialog.getInteger(None,"Populate partition","Number of nodes to add:",2,1)
+        n, ok = QInputDialog.getInt(None, "Populate partition",
+                                    "Number of nodes to add:", 2, 1)
         if ok:
             self.node.populate(n)
-            #self.scene().set_style_from(self.scene().tree,self.scene().layout_func)
             self.scene().GUI.redraw()
 
     def set_start_node(self):
