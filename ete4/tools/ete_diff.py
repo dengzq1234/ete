@@ -618,7 +618,6 @@ def treediff(t1, t2, prop1='name', prop2='name', dist_fn=EUCL_DIST,
                                                 parts1[r][1].symmetric_difference(parts2[c][1]),
                                                 parts1[r][0], parts2[c][0])
             difftable.append([dist, b_dist, side1, side2, diff, n1, n2])
-
         return difftable
 
     # Show only best match
@@ -707,8 +706,8 @@ def show_difftable(difftable, extended=False):
                     max_col_width=80, wrap_style="wrap", row_line=True)
     else:
         for dist, b_dist, side1, side2, diff, n1, n2 in sorted(difftable, reverse=True):
-            showtable.append([dist, len(side1), len(side2), len(diff), sepstring(side1), sepstring(side2), sepstring(diff)])
-        print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "refTree", "targetTree", "Diff"],
+            showtable.append([dist, len(side1), len(side2), len(diff), sepstring(side1), sepstring(side2), sepstring(n1), sepstring(n2), sepstring(diff)])
+        print_table(showtable, header=["Dist", "Size1", "Size2", "ndiffs", "ref_prop", "target_prop", "refTree", "targetTree", "Diff"],
                     max_col_width=80, wrap_style="wrap", row_line=True)
     return showtable
 
