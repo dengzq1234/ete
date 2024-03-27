@@ -31,7 +31,8 @@ const gradients = [
     'j', 'k', 'l',
     'm', 'n', 'o',
     'p', 'q', 'r', 
-    's', 't'
+    's', 't', '-', 
+    'x', 'z'
 ];
 
 // Load texture atlas
@@ -46,6 +47,7 @@ PIXI.Loader.shared
         const textures_notext = {};
         const textures_text = {};
         const textures_gradients = {};
+        
         for (const a of aa) {
             textures_notext[a] = resources[`aa_notext_${a}`].texture;
             textures_text[a] = resources[`aa_text_${a}`].texture;
