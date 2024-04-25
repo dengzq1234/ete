@@ -61,7 +61,10 @@ __all__ = [
 
 
 def clean_text(text):
-    return re.sub(r'[^A-Za-z0-9_-]', '',  text)
+    # Check if the input tuple or string
+    if isinstance(text, tuple):
+        text = text[0]  #first elm is text
+    return re.sub(r'[^A-Za-z0-9_-]', '', text)
 
 
 def swap_pos(pos):
@@ -308,6 +311,7 @@ class TextFace(Face):
                 'max_fsize': self._fsize,
                 'ftype': f'{self.ftype}, sans-serif', # default sans-serif
                 }
+        
         yield draw_text(self._box,
                 self._content, self.name, rotation=self.rotation, style=style)
 
@@ -410,7 +414,8 @@ class CircleFace(Face):
                 self._max_radius = min(dy * zy * r / 2, self.radius)
 
             cx = x + self._max_radius / zx - padding_x # centered
-
+            #cx = x
+            
             if pos == 'aligned_bottom':
                 cy = y + dy - self._max_radius / zy
 

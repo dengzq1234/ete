@@ -40,6 +40,18 @@ def unquote(name):
 # Common IO parts in property dicts.
 STRING_IO = {'read': unquote, 'write': quote}
 NUMBER_IO = {'read': float,   'write': lambda x: '%g' % float(x)}
+DIRTY_NUMBER_IO = {'read': dirty_read, 'write': lambda x: '%g' % float(x)}
+
+def dirty_read(text):
+    """Return the float value of the given text, even if it contains errors."""
+    # This is a hack to be able to read newicks with errors.
+    try:
+        return float(text)
+    except ValueError:
+        unquoted_text = unquote(text)
+        support = unquoted_text.split(':')[0]
+        #name = unquoted_text.split(':')[1]
+        return float(support)
 
 # Common property dicts.
 NAME    = dict(STRING_IO, pname='name')
