@@ -40,7 +40,7 @@ def unquote(name):
 # Common IO parts in property dicts.
 STRING_IO = {'read': unquote, 'write': quote}
 NUMBER_IO = {'read': float,   'write': lambda x: '%g' % float(x)}
-#DIRTY_NUMBER_IO = {'read': dirty_read, 'write': lambda x: '%g' % float(x)}
+DIRTY_NUMBER_IO = {'read': dirty_read, 'write': lambda x: '%g' % float(x)}
 
 def dirty_read(text):
     """Return the float value of the given text, even if it contains errors."""
