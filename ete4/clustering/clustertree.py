@@ -1,64 +1,14 @@
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
-from __future__ import print_function
-
 from sys import stderr
 from . import clustvalidation
-from ..coretype.tree import _translate_nodes
-from .. import TreeNode, ArrayTable
+from ete4 import Tree, ArrayTable
 import numpy
 
-__all__ = ["ClusterNode", "ClusterTree"]
+__all__ = ["ClusterTree"]
 
-class ClusterNode(TreeNode):
-    """ Creates a new Cluster Tree object, which is a collection
-    of ClusterNode instances connected in a hierarchical way, and
-    representing a clustering result.
 
-    a newick file or string can be passed as the first argument. An
-    ArrayTable file or instance can be passed as a second argument.
-
-    Examples:
-      t1 = Tree() # creates an empty tree
-      t2 = Tree( '(A:1,(B:1,(C:1,D:1):0.5):0.5);' )
-      t3 = Tree( '/home/user/myNewickFile.txt' )
+class ClusterTree(Tree):
+    """
+    A ClusterTree is a Tree that represents a clustering result.
     """
 
     def _set_forbidden(self, value):
@@ -98,13 +48,13 @@ class ClusterNode(TreeNode):
     profile = property(fget=_get_prof, fset=_set_profile)
     deviation = property(fget=_get_std, fset=_set_forbidden)
 
-    def __init__(self, newick = None, text_array = None, \
+    def __init__(self, data=None, children=None, text_array=None,
                  fdist=clustvalidation.default_dist):
         # Default dist is spearman_dist when scipy module is loaded
         # otherwise, it is set to euclidean_dist.
 
         # Initialize basic tree features and loads the newick (if any)
-        TreeNode.__init__(self, newick)
+        Tree.__init__(self, data, children)
         self._fdist = None
         self._silhouette = None
         self._intercluster_dist = None
@@ -123,28 +73,24 @@ class ClusterNode(TreeNode):
         if text_array:
             self.link_to_arraytable(text_array)
 
-        if newick:
+        if data:
             self.set_distance_function(fdist)
 
     def __repr__(self):
         return "ClusterTree node (%s)" %hex(self.__hash__())
 
     def set_distance_function(self, fn):
-        """ Sets the distance function used to calculate cluster
+        """Set the distance function used to calculate cluster
         distances and silouette index.
 
-        ARGUMENTS:
+        :param fn: Function acepting two numpy arrays as arguments.
 
-          fn: a pointer to python function acepting two arrays (numpy) as
-          arguments.
+        Example:::
 
-        EXAMPLE:
-
-          # A simple euclidean distance
+          # Set a simple euclidean distance.
           my_dist_fn = lambda x,y: abs(x-y)
           tree.set_distance_function(my_dist_fn)
-
-          """
+        """
         for n in self.traverse():
             n._fdist = fn
             n._silhouette = None
@@ -152,15 +98,12 @@ class ClusterNode(TreeNode):
             n._intracluster_dist = None
 
     def link_to_arraytable(self, arraytbl):
-        """ Allows to link a given arraytable object to the tree
-        structure under this node. Row names in the arraytable object
-        are expected to match leaf names.
+        """Link the given arraytable to the tree and return a list of
+        nodes for with profiles could not been found in arraytable.
 
-        Returns a list of nodes for with profiles could not been found
-        in arraytable.
-
+        Row names in the arraytable object are expected to match leaf
+        names.
         """
-
         # Initialize tree with array data
 
         if type(arraytbl) == ArrayTable:
@@ -177,9 +120,9 @@ class ClusterNode(TreeNode):
 
         for n in self.traverse():
             n.arraytable = array
-            if n.is_leaf() and n.name in array.rowNames:
+            if n.is_leaf and n.name in array.rowNames:
                 n._profile = array.get_row_vector(n.name)
-            elif n.is_leaf():
+            elif n.is_leaf:
                 n._profile = [numpy.nan]*len(array.colNames)
                 missing_leaves.append(n)
 
@@ -190,19 +133,13 @@ class ClusterNode(TreeNode):
 
         self.arraytable = array
 
-    def iter_leaf_profiles(self):
-        """ Returns an iterator over all the profiles associated to
-        the leaves under this node."""
-        for l in self.iter_leaves():
+    def leaf_profiles(self):
+        """Yield profiles associated to the leaves under this node."""
+        for l in self.leaves():
             yield l.get_profile()[0]
 
-    def get_leaf_profiles(self):
-        """ Returns the list of all the profiles associated to the
-        leaves under this node."""
-        return [l.get_profile()[0] for l in self.iter_leaves()]
-
     def get_silhouette(self, fdist=None):
-        """ Calculates the node's silhouette value by using a given
+        """Calculates the node's silhouette value by using a given
         distance function. By default, euclidean distance is used. It
         also calculates the deviation profile, mean profile, and
         inter/intra-cluster distances.
@@ -212,15 +149,17 @@ class ClusterNode(TreeNode):
            - node.intercluster
            - node.silhouete
 
-        intracluster distances a(i) are calculated as the Centroid
-        Diameter
+        Intracluster distances a(i) are calculated as the Centroid Diameter.
 
-        intercluster distances b(i) are calculated as the Centroid linkage distance
+        Intercluster distances b(i) are calculated as the Centroid
+        linkage distance.
 
-        ** Rousseeuw, P.J. (1987) Silhouettes: A graphical aid to the
-        interpretation and validation of cluster analysis.
-        J. Comput. Appl. Math., 20, 53-65.
+        :Citation:
 
+          *Rousseeuw, P.J. (1987) Silhouettes: A graphical aid to the
+          interpretation and validation of cluster analysis.*
+
+          J. Comput. Appl. Math., 20, 53-65.
         """
         if fdist is None:
             fdist = self._fdist
@@ -238,7 +177,7 @@ class ClusterNode(TreeNode):
 
         if fdist is None:
             fdist = self._fdist
-        nodes = _translate_nodes(self, *clusters)
+        nodes = self._translate_nodes(clusters)
         return clustvalidation.get_dunn_index(fdist, *nodes)
 
     def _calculate_avg_profile(self):
@@ -247,9 +186,3 @@ class ClusterNode(TreeNode):
 
         # Updates internal values
         self._profile, self._std_profile = clustvalidation.get_avg_profile(self)
-
-
-# cosmetic alias
-#: .. currentmodule:: ete3
-#
-ClusterTree = ClusterNode

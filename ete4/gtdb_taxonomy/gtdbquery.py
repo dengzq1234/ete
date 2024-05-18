@@ -1,48 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-
-
-from __future__ import absolute_import
-from __future__ import print_function
 import sys
 import os
 
@@ -55,19 +12,16 @@ import sqlite3
 import math
 import tarfile
 import warnings
+import requests
 
-# from ..coretype.tree  import Tree
-# from ..phylo.phylotree  import Tree
+from ete4 import ETE_DATA_HOME, update_ete_data
 
-
-#import gtdb_to_taxdump
 
 __all__ = ["GTDBTaxa", "is_taxadb_up_to_date"]
 
 DB_VERSION = 2
-#DEFAULT_GTDBTAXADB = os.path.join(os.environ.get('HOME', '/'), '.etetoolkit', 'gtdbtaxa.sqlite')
-DEFAULT_GTDBTAXADB = os.path.join(os.path.dirname(os.path.realpath(__file__)), '.gtdb', 'gtdbtaxa.sqlite')
-DEFAULT_GTDBTAXADUMP = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gtdbdump', 'gtdbr202dump.tar.gz')
+DEFAULT_GTDBTAXADB = ETE_DATA_HOME + '/gtdbtaxa.sqlite'
+DEFAULT_GTDBTAXADUMP = ETE_DATA_HOME + '/gtdbdump.tar.gz'
 
 def is_taxadb_up_to_date(dbfile=DEFAULT_GTDBTAXADB):
     """Check if a valid and up-to-date gtdbtaxa.sqlite database exists
@@ -87,14 +41,13 @@ def is_taxadb_up_to_date(dbfile=DEFAULT_GTDBTAXADB):
     return True
 
 
-class GTDBTaxa(object):
+class GTDBTaxa:
     """
-    versionadded: 2.3
-    Provides a local transparent connector to the GTDB taxonomy database.
+    Local transparent connector to the GTDB taxonomy database.
     """
 
     def __init__(self, dbfile=None, taxdump_file=None, memory=False):
-        
+
         if not dbfile:
             self.dbfile = DEFAULT_GTDBTAXADB
         else:
@@ -105,6 +58,11 @@ class GTDBTaxa(object):
 
         if dbfile != DEFAULT_GTDBTAXADB and not os.path.exists(self.dbfile):
             print('GTDB database not present yet (first time used?)', file=sys.stderr)
+            urlbase = ('https://github.com/etetoolkit/ete-data/raw/main'
+                       '/gtdb_taxonomy/gtdblatest')
+            
+            update_ete_data(f'{DEFAULT_GTDBTAXADUMP}', f'{urlbase}/gtdb_latest_dump.tar.gz')
+
             self.update_taxonomy_database(taxdump_file=DEFAULT_GTDBTAXADUMP)
 
         if not os.path.exists(self.dbfile):
@@ -117,20 +75,20 @@ class GTDBTaxa(object):
             print('GTDB database format is outdated. Upgrading', file=sys.stderr)
             self.update_taxonomy_database(taxdump_file)
 
-        if memory: 
+        if memory:
             filedb = self.db
             self.db = sqlite3.connect(':memory:')
             filedb.backup(self.db)
 
     def update_taxonomy_database(self, taxdump_file=None):
-        """Updates the GTDB taxonomy database by downloading and parsing the latest
-        gtdbtaxdump.tar.gz file from gtdbdump folder.
-        :param None taxdump_file: an alternative location of the gtdbtaxdump.tar.gz file.
+        """Update the GTDB taxonomy database.
+
+        It updates it by downloading and parsing the latest
+        gtdbtaxdump.tar.gz file.
+
+        :param taxdump_file: Alternative location of gtdbtaxdump.tar.gz.
         """
-        if not taxdump_file:
-            update_db(self.dbfile)
-        else:
-            update_db(self.dbfile, targz_file=taxdump_file)
+        update_db(self.dbfile, targz_file=taxdump_file)
 
     def _connect(self):
         self.db = sqlite3.connect(self.dbfile)
@@ -189,18 +147,10 @@ class GTDBTaxa(object):
     #     return taxid, spname, norm_score
 
     def get_rank(self, taxids):
-        'return a dictionary converting a list of taxids into their corresponding GTDB taxonomy rank'
-
-        all_ids = set(taxids)
-        all_ids.discard(None)
-        all_ids.discard("")
-        query = ','.join(['"%s"' %v for v in all_ids])
-        cmd = "select taxid, rank FROM species WHERE taxid IN (%s);" %query
-        result = self.db.execute(cmd)
-        id2rank = {}
-        for tax, spname in result.fetchall():
-            id2rank[tax] = spname
-        return id2rank
+        """Return dictionary converting taxids to their GTDB taxonomy rank."""
+        ids = ','.join('"%s"' % v for v in set(taxids) - {None, ''})
+        result = self.db.execute('SELECT taxid, rank FROM species WHERE taxid IN (%s)' % ids)
+        return {tax: spname for tax, spname in result.fetchall()}
 
     def get_lineage_translator(self, taxids):
         """Given a valid taxid number, return its corresponding lineage track as a
@@ -388,18 +338,19 @@ class GTDBTaxa(object):
             self.translate_to_names([tid for tid, count in descendants.items() if count == 1])
             return self.translate_to_names([tid for tid, count in descendants.items() if count == 1])
 
-    def get_topology(self, taxnames, intermediate_nodes=False, rank_limit=None, collapse_subspecies=False, annotate=True):
-        """Given a list of taxid numbers, return the minimal pruned GTDB taxonomy tree
-        containing all of them.
-        :param False intermediate_nodes: If True, single child nodes
+    def get_topology(self, taxnames, intermediate_nodes=False, rank_limit=None,
+                     collapse_subspecies=False, annotate=True):
+        """Return minimal pruned GTDB taxonomy tree containing all given taxids.
+
+        :param intermediate_nodes: If True, single child nodes
             representing the complete lineage of leaf nodes are kept.
             Otherwise, the tree is pruned to contain the first common
             ancestor of each group.
-        :param None rank_limit: If valid NCBI rank name is provided,
-            the tree is pruned at that given level. For instance, use
+        :param rank_limit: If valid NCBI rank name is provided, the
+            tree is pruned at that given level. For instance, use
             rank="species" to get rid of sub-species or strain leaf
             nodes.
-        :param False collapse_subspecies: If True, any item under the
+        :param collapse_subspecies: If True, any item under the
             species rank will be collapsed into the species upper
             node.
         """
@@ -407,11 +358,6 @@ class GTDBTaxa(object):
         #taxids, merged_conversion = self._translate_merged(taxids)
         tax2id = self.get_name_translator(taxnames) #{'f__Korarchaeaceae': [2174], 'o__Peptococcales': [205487], 'p__Huberarchaeota': [610]}
         taxids = [i[0] for i in tax2id.values()]
-
-        try:
-            PhyloTree()
-        except:
-            from .. import PhyloTree
 
         if len(taxids) == 1:
             root_taxid = int(list(taxids)[0])
@@ -432,14 +378,14 @@ class GTDBTaxa(object):
             leaves = set([v for v, count in Counter(subtree).items() if count == 1])
             tax2name = self.get_taxid_translator(list(subtree))
             name2tax ={spname:taxid for taxid,spname in tax2name.items()}
-            nodes[root_taxid] = PhyloTree(name=root_taxid)
+            nodes[root_taxid] = PhyloTree({'name': str(root_taxid)})
             current_parent = nodes[root_taxid]
             for tid in subtree:
                 if tid in visited:
                     current_parent = nodes[tid].up
                 else:
                     visited.add(tid)
-                    nodes[tid] = PhyloTree(name=tax2name.get(tid, ''))
+                    nodes[tid] = PhyloTree({'name': tax2name.get(tid, '')})
                     current_parent.add_child(nodes[tid])
                     if tid not in leaves:
                         current_parent = nodes[tid]
@@ -488,7 +434,7 @@ class GTDBTaxa(object):
         #remove onechild-nodes
 
         if not intermediate_nodes:
-            for n in root.get_descendants():
+            for n in root.descendants():
                 if len(n.children) == 1 and int(name2tax.get(n.name, n.name)) not in taxids:
                     n.delete(prevent_nondicotomic=False)
 
@@ -500,7 +446,7 @@ class GTDBTaxa(object):
         if collapse_subspecies:
             to_detach = []
             for node in tree.traverse():
-                if node.props.get('rank') == "species":
+                if node.props.get('rank') == 'species':
                     to_detach.extend(node.children)
             for n in to_detach:
                 n.detach()
@@ -510,38 +456,35 @@ class GTDBTaxa(object):
 
         return tree
 
+    def annotate_tree(self, t, taxid_attr='name',
+                      tax2name=None, tax2track=None, tax2rank=None):
+        """Annotate a tree containing taxids as leaf names.
 
-    def annotate_tree(self, t, taxid_attr="name", tax2name=None, tax2track=None, tax2rank=None):
-        """Annotate a tree containing taxids as leaf names by adding the  'taxid',
-        'sci_name', 'lineage', 'named_lineage' and 'rank' additional attributes.
-        :param t: a Tree (or Tree derived) instance.
-        :param name taxid_attr: Allows to set a custom node attribute
-            containing the taxid number associated to each node (i.e.
-            species in PhyloTree instances).
-        :param tax2name,tax2track,tax2rank: Use these arguments to
-            provide pre-calculated dictionaries providing translation
-            from taxid number and names,track lineages and ranks.
+        It annotates by adding the properties 'taxid', 'sci_name',
+        'lineage', 'named_lineage' and 'rank'.
+
+        :param t: Tree to annotate.
+        :param taxid_attr: Node attribute (property) containing the
+            taxid number associated to each node (i.e. species in
+            PhyloTree instances).
+        :param tax2name, tax2track, tax2rank: Pre-calculated
+            dictionaries with translations from taxid number to names,
+            track lineages and ranks.
         """
-
         taxids = set()
         if taxid_attr == "taxid":
-            for n in t.traverse():
-                try:
-                    tid = int(getattr(n, taxid_attr))
-                except (ValueError,AttributeError):
-                    pass
-                else:
-                    taxids.add(tid)
+            for n in t.leaves():
+                if taxid_attr in n.props:
+                    taxids.add(n.props[taxid_attr])
         else:
-            for n in t.traverse():
+            for n in t.leaves():
                 try:
-                    #taxaname = getattr(n, taxid_attr) #
-                    taxaname = n.props.get(taxid_attr)
-                    tid = self.get_name_translator([taxaname])[taxaname][0] # translate gtdb name -> id
-                except (KeyError, ValueError,AttributeError):
-                    pass
-                else:
+                    # translate gtdb name -> id
+                    taxaname = getattr(n, taxid_attr, n.props.get(taxid_attr))
+                    tid = self.get_name_translator([taxaname])[taxaname][0]
                     taxids.add(tid)
+                except (KeyError, ValueError, AttributeError):
+                    pass
         merged_conversion = {}
 
         taxids, merged_conversion = self._translate_merged(taxids)
@@ -558,44 +501,49 @@ class GTDBTaxa(object):
 
         if not tax2rank:
             tax2rank = self.get_rank(list(tax2name.keys()))
-        
+
         name2tax ={spname:taxid for taxid,spname in tax2name.items()}
         n2leaves = t.get_cached_content()
 
-        for n in t.traverse('postorder'):
-            try:
-                #node_taxid = int(getattr(n, taxid_attr))
-                #node_taxid = getattr(n, taxid_attr)
-                node_taxid = n.props.get(taxid_attr)
-            except (ValueError, AttributeError):
+        for node in t.traverse('postorder'):
+            if node.is_leaf:
+                node_taxid = getattr(node, taxid_attr, node.props.get(taxid_attr))
+            else:
                 node_taxid = None
+            node.add_prop('taxid', node_taxid)
 
-            n.add_prop('taxid', node_taxid)
             if node_taxid:
                 tmp_taxid = self.get_name_translator([node_taxid]).get(node_taxid, [None])[0]
-                #tmp_taxid = self.get_name_translator([node_taxid])[node_taxid][0] # translate to temperatoru
+
                 if node_taxid in merged_conversion:
                     node_taxid = merged_conversion[node_taxid]
 
-                n.add_props(sci_name = tax2name.get(node_taxid, getattr(n, taxid_attr, '')),
+                rank = tax2rank.get(tmp_taxid, 'Unknown')
+                if rank != 'subspecies':
+                    sci_name = tax2name.get(tmp_taxid, '')
+                else:
+                    # For subspecies, gtdb taxid (like 'RS_GCF_0062.1') is not informative. Better use the species one.
+                    track = tax2track[tmp_taxid]  # like ['root', 'd__Bacteria', ..., 's__Moorella', 'RS_GCF_0062.1']
+                    sci_name = tax2name.get(track[-2], '')
+
+                node.add_props(sci_name = sci_name,
                                common_name = tax2common_name.get(node_taxid, ''),
                                lineage = tax2track.get(tmp_taxid, []),
                                rank = tax2rank.get(tmp_taxid, 'Unknown'),
                                named_lineage = [tax2name.get(tax, str(tax)) for tax in tax2track.get(tmp_taxid, [])])
-            elif n.is_leaf():
-                n.add_props(sci_name = getattr(n, taxid_attr, 'NA'),
+            elif node.is_leaf:
+                node.add_props(sci_name = getattr(node, taxid_attr, node.props.get(taxid_attr, 'NA')),
                                common_name = '',
                                lineage = [],
                                rank = 'Unknown',
                                named_lineage = [])
             else:
-                lineage = self._common_lineage([lf.props.get('lineage') for lf in n2leaves[n]])
+                lineage = self._common_lineage([lf.props.get('lineage') for lf in n2leaves[node]])
                 if lineage[-1]:
                     ancestor = self.get_taxid_translator([lineage[-1]])[lineage[-1]]
                 else:
                     ancestor = None
-                #print([tax2name.get(tax, str(tax)) for tax in lineage])
-                n.add_props(sci_name = tax2name.get(ancestor, str(ancestor)),
+                node.add_props(sci_name = tax2name.get(ancestor, str(ancestor)),
                                common_name = tax2common_name.get(lineage[-1], ''),
                                taxid = ancestor,
                                lineage = lineage,
@@ -688,6 +636,8 @@ class GTDBTaxa(object):
         return broken_branches, broken_clades, broken_clade_sizes
 
 
+    # TODO: See why this code is commented out and comment it properly or remove it.
+    #
     # def annotate_tree_with_taxa(self, t, name2taxa_file, tax2name=None, tax2track=None, attr_name="name"):
     #     if name2taxa_file:
     #         names2taxid = dict([map(strip, line.split("\t"))
@@ -792,42 +742,50 @@ def generate_table(t):
             print('\t'.join([n.name, "", n.props.get('taxname'), n.props.get("common_name", ''), n.props.get("rank"), ','.join(track)]), file=OUT)
     OUT.close()
 
-    
+
 def update_db(dbfile, targz_file=None):
     basepath = os.path.split(dbfile)[0]
     if basepath and not os.path.exists(basepath):
         os.mkdir(basepath)
-
-    try:
-        tar = tarfile.open(targz_file, 'r')
-    except:
-        raise  ValueError("Please provide taxa dump tar.gz file")
-
+    
+    # if users don't provie targz_file, update the latest version from ete-data 
+    if not targz_file:
+        update_local_taxdump(DEFAULT_GTDBTAXADUMP)
+        targz_file = DEFAULT_GTDBTAXADUMP
+    
+    tar = tarfile.open(targz_file, 'r')
     t, synonyms = load_gtdb_tree_from_dump(tar)
 
     prepostorder = [int(node.name) for post, node in t.iter_prepostorder()]
-    pickle.dump(prepostorder, open(dbfile+'.traverse.pkl', "wb"), 2)
+
+    with open(dbfile+'.traverse.pkl', 'wb') as fout:
+        pickle.dump(prepostorder, fout, 2)
 
     print("Updating database: %s ..." %dbfile)
     generate_table(t)
 
-    # with open("syn.tab", "w") as SYN:
-    #     SYN.write('\n'.join(["%s\t%s" %(v[0],v[1]) for v in synonyms]))
+    upload_data(dbfile)
 
-    # with open("merged.tab", "w") as merged:
-    #     for line in tar.extractfile("merged.dmp"):
-    #         line = str(line.decode())
-    #         out_line = '\t'.join([_f.strip() for _f in line.split('|')[:2]])
-    #         merged.write(out_line+'\n')
-    try:
-        upload_data(dbfile)
-    except:
-        raise
+    os.system("rm taxa.tab")
+
+def update_local_taxdump(fname=DEFAULT_GTDBTAXADUMP):
+    # latest version of gtdb taxonomy dump
+    url = "https://github.com/etetoolkit/ete-data/raw/main/gtdb_taxonomy/gtdblatest/gtdb_latest_dump.tar.gz"
+    
+    if not os.path.exists(fname):
+        print(f'Downloading {fname} from {url} ...')
+        with open(fname, 'wb') as f:
+            f.write(requests.get(url).content)
     else:
-        os.system("rm taxa.tab")
-        # remove only downloaded taxdump file
-        if not targz_file:
-            os.system("rm gtdbtaxdump.tar.gz")
+        md5_local = md5(open(fname, 'rb').read()).hexdigest()
+        md5_remote = requests.get(url + '.md5').text.split()[0]
+
+        if md5_local != md5_remote:
+            print(f'Updating {fname} from {url} ...')
+            with open(fname, 'wb') as f:
+                f.write(requests.get(url).content)
+        else:
+            print(f'File {fname} is already up-to-date with {url} .')
 
 def upload_data(dbfile):
     print()
@@ -873,12 +831,15 @@ def upload_data(dbfile):
     #     db.execute("INSERT INTO merged (taxid_old, taxid_new) VALUES (?, ?);", (taxid_old, taxid_new))
     # print()
     # db.commit()
-    for i, line in enumerate(open("taxa.tab")):
-        if i%5000 == 0 :
-            print('\rInserting taxids:      % 6d' %i, end=' ', file=sys.stderr)
-            sys.stderr.flush()
-        taxid, parentid, spname, common, rank, lineage = line.strip('\n').split('\t')
-        db.execute("INSERT INTO species (taxid, parent, spname, common, rank, track) VALUES (?, ?, ?, ?, ?, ?);", (taxid, parentid, spname, common, rank, lineage))
+
+    with open('taxa.tab') as f_taxa:
+        for i, line in enumerate(f_taxa):
+            if i % 5000 == 0:
+                print('\rInserting taxids: %8d' % i, end=' ', file=sys.stderr)
+                sys.stderr.flush()
+            taxid, parentid, spname, common, rank, lineage = line.strip('\n').split('\t')
+            db.execute(('INSERT INTO species          (taxid, parent, spname, common, rank, track) '
+                        'VALUES (?, ?, ?, ?, ?, ?)'), (taxid, parentid, spname, common, rank, lineage))
     print()
     db.commit()
 
@@ -886,15 +847,15 @@ if __name__ == "__main__":
     #from .. import PhyloTree
     gtdb = GTDBTaxa()
     gtdb.update_taxonomy_database(DEFAULT_GTDBTAXADUMP)
-    
+
     descendants = gtdb.get_descendant_taxa('c__Thorarchaeia', collapse_subspecies=True, return_tree=True)
     print(descendants.write(properties=None))
-    print(descendants.get_ascii(attributes=['sci_name', 'taxid','rank']))
+    print(descendants.get_ascii(properties=['sci_name', 'taxid','rank']))
     tree = gtdb.get_topology(["p__Huberarchaeota", "o__Peptococcales", "f__Korarchaeaceae", "s__Korarchaeum"], intermediate_nodes=True, collapse_subspecies=True, annotate=True)
-    print(tree.get_ascii(attributes=["taxid",  "sci_name", "rank"]))
-    
+    print(tree.get_ascii(properties=["taxid",  "sci_name", "rank"]))
+
     tree = PhyloTree('((c__Thorarchaeia, c__Lokiarchaeia_A), s__Caballeronia udeis);', sp_naming_function=lambda name: name)
     tax2name, tax2track, tax2rank = gtdb.annotate_tree(tree, taxid_attr="name")
-    print(tree.get_ascii(attributes=["taxid","name", "sci_name", "rank"]))
+    print(tree.get_ascii(properties=["taxid","name", "sci_name", "rank"]))
 
     print(gtdb.get_name_lineage(['RS_GCF_006228565.1','GB_GCA_001515945.1']))

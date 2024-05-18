@@ -1,42 +1,3 @@
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
 import os
 import re
 import logging
@@ -135,20 +96,20 @@ class Prottest(ModelTesterTask):
                                          self.alg_basename+"_phyml_tree.txt")
                 stats_file = os.path.join(j.jobdir,
                                           self.alg_basename+"_phyml_stats.txt")
-                tree = PhyloTree(tree_file)
+                tree = PhyloTree(open(tree_file))
                 m = re.search('Log-likelihood:\s+(-?\d+\.\d+)',
                               open(stats_file).read())
                 lk = float(m.groups()[0])
-                tree.add_feature("lk", lk)
-                tree.add_feature("model", job.args["--model"])
+                tree.add_property("lk", lk)
+                tree.add_property("model", job.args["--model"])
                 lks.append([float(tree.lk), tree.model, tree])
         elif self.lk_mode == "raxml":
             for job in [j for j in self.jobs if j.flag == "raxml"]:
                 lk = open(os.path.join(job.jobdir, "RAxML_log.%s"
                                        %job.args["-n"])).readline().split()[1]
                 tree = PhyloTree(job.args["-t"])
-                tree.add_feature("lk", lk)
-                tree.add_feature("model", job.model)
+                tree.add_property("lk", lk)
+                tree.add_property("model", job.model)
                 lks.append([lk, tree.model, tree])
         lks.sort()
         lks.reverse()
@@ -159,4 +120,3 @@ class Prottest(ModelTesterTask):
         if self.tree_file:
             tree.write(self.tree_file)
         ModelTesterTask.finish(self)
-

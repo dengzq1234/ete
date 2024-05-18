@@ -1,44 +1,3 @@
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
-from __future__ import print_function
-
 import re
 
 def draw_tree(tree, conf, outfile):
@@ -50,7 +9,7 @@ def draw_tree(tree, conf, outfile):
         return
 
     def ly_basic(node):
-        if node.is_leaf():
+        if node.is_leaf:
             node.img_style['size'] = 0
         else:
             node.img_style['size'] = 0
@@ -68,7 +27,7 @@ def draw_tree(tree, conf, outfile):
         node.img_style['vt_line_width'] = 1
 
     def ly_leaf_names(node):
-        if node.is_leaf():
+        if node.is_leaf:
             spF = TextFace(node.species, fsize=10, fgcolor='#444444', fstyle='italic', ftype='Helvetica')
             add_face_to_node(spF, node, column=0, position='branch-right')
             if hasattr(node, 'genename'):
@@ -76,12 +35,12 @@ def draw_tree(tree, conf, outfile):
                 add_face_to_node(geneF, node, column=1, position='branch-right')
 
     def ly_supports(node):
-        if not node.is_leaf() and node.up:
+        if not node.is_leaf and node.up:
             supFace = TextFace("%0.2g" %(node.support), fsize=7, fgcolor='indianred')
             add_face_to_node(supFace, node, column=0, position='branch-top')
 
     def ly_tax_labels(node):
-        if node.is_leaf():
+        if node.is_leaf:
             c = LABEL_START_COL
             largest = 0
             for tname in TRACKED_CLADES:
@@ -101,7 +60,7 @@ def draw_tree(tree, conf, outfile):
         pass
 
     def ly_block_alg(node):
-        if node.is_leaf():
+        if node.is_leaf:
             if 'sequence' in node.features:
                 seqFace = SeqMotifFace(node.sequence, [])
                 # [10, 100, "[]", None, 10, "black", "rgradient:blue", "arial|8|white|domain Name"],
@@ -183,7 +142,7 @@ def draw_tree(tree, conf, outfile):
         tree.set_species_naming_function(spname)
         annotate_tree_with_ncbi(tree)
         tree.set_outgroup(out)
-        tree.swap_children()
+        tree.reverse_children()
     except Exception:
         pass
 
@@ -196,8 +155,8 @@ def annotate_tree_with_ncbi(tree):
     ncbi.connect_database()
     name2sp = ncbi.get_name_translator(tree.get_species())
     for lf in tree.iter_leaves():
-        lf.add_features(taxid=name2sp.get(lf.species, [0])[0])
-        lf.add_features(genename=re.sub('\{[^}]+\}', '', lf.name).strip())
+        lf.add_properties(taxid=name2sp.get(lf.species, [0])[0])
+        lf.add_properties(genename=re.sub('\{[^}]+\}', '', lf.name).strip())
     ncbi.annotate_tree(tree, attr_name='taxid')
 
 def spname(name):

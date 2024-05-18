@@ -1,60 +1,29 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-
-
-from __future__ import absolute_import
-from __future__ import print_function
 import sys
 import os
 import errno
 
 TOOLSPATH = os.path.realpath(os.path.split(os.path.realpath(__file__))[0])
-#sys.path.insert(0, TOOLSPATH)
-#sys.path.insert(1, TOOLSPATH.replace("ete3/tools", ''))
-#print sys.path
 
 import argparse
-from . import (ete_split, ete_expand, ete_annotate, ete_ncbiquery, ete_view,
-               ete_generate, ete_mod, ete_extract, ete_compare, ete_evol,
-               ete_maptrees, ete_diff, ete_explore, ete_draw)
+from . import (ete_split, ete_expand, ete_annotate, ete_ncbiquery,
+               ete_generate, ete_mod, ete_extract, ete_compare,
+               ete_maptrees, ete_diff, ete_explore)
+try:
+    from . import ete_view, ete_evol
+except ImportError:
+    class DummyNamespace:
+        pass
+    ete_view = DummyNamespace()
+    ete_view.DESC = "Treeview module not available. It requires Qt."
+    ete_view.populate_args = lambda args: None
+    ete_view.run = lambda args: None
+    ete_evol = DummyNamespace()
+    ete_evol.DESC = "ete_evol module not available. It requires Qt."
+    ete_evol.populate_args = lambda args: None
+    ete_evol.run = lambda args: None
+
 from . import common
 from .common import log
 from .utils import colorify, which
@@ -134,8 +103,8 @@ def _main(arguments):
             del arguments[1]
             status = ete_upgrade_tools._main()
             sys.exit(status)
-            
-        elif subcommand == "build": 
+
+        elif subcommand == "build":
             from . import ete_build
             del arguments[1]
 
@@ -143,9 +112,9 @@ def _main(arguments):
             ete_path = which("ete4")
 
             if ete_path:
-                builtin_apps_path = os.path.join(os.path.split(ete_path)[0], "ete3_apps/bin")
+                builtin_apps_path = os.path.join(os.path.split(ete_path)[0], "ete4_apps/bin")
             ete_build._main(arguments, builtin_apps_path)
-            
+
             return
 
     # CREATE REUSABLE PARSER OPTIONS
@@ -171,7 +140,7 @@ def _main(arguments):
     # split
     split_args_p = argparse.ArgumentParser(add_help=False)
     ete_split.populate_args(split_args_p)
-    
+
     # diff
     diff_args_p = argparse.ArgumentParser(add_help=False)
     ete_diff.populate_args(diff_args_p)
@@ -243,7 +212,7 @@ def _main(arguments):
                                        description=ete_maptrees.DESC)
     maptrees_args_p.set_defaults(func=ete_maptrees.run)
     ete_maptrees.populate_args(maptrees_args_p)
-    
+
     # - DIFF -
     diff_args_p = subparser.add_parser("diff", parents=[source_args_p, ref_args_p, main_args_p],
                                            description=ete_diff.DESC,
@@ -268,17 +237,17 @@ def _main(arguments):
     draw_args_p.set_defaults(func=ete_draw.run)
     ete_draw.populate_args(draw_args_p) 
     # - helpers -
-    
+
     generate_args_p = subparser.add_parser("version")
     generate_args_p = subparser.add_parser("upgrade-external-tools")
-    
+
     # ===================
     #  EXECUTE PROGRAM
     # ===================
     if len(arguments) == 1:
         parser.print_usage()
         return
-    
+
     args = parser.parse_args(arguments[1:])
     LOG_LEVEL = args.verbosity
     if hasattr(args, "src_trees"):

@@ -33,17 +33,14 @@ async function on_box_contextmenu(event, box, name, properties, node_id=[]) {
     div_contextmenu.innerHTML = "";
 
     if (box) {
-        const name_text = ": " + (name.length < 20 ? name :
+        const name_text = ": " + (name === null || name.length < 20 ? name :
                                   (name.slice(0, 8) + "..." + name.slice(-8)));
 
-        add_label("Node" + (name.length > 0 ? name_text : ""));
+        add_label("Node" + (name !== null && name.length > 0 ? name_text : ""));
 
         add_button("Zoom into branch <span>Dblclick</span>", () => zoom_into_box(box),  "", "zoom");
 
-        if (node_id.length > 0) {
-            await add_node_options(box, name, properties, node_id);
-        }
-
+        await add_node_options(box, name, properties, node_id);
     }
 
     add_label("Tree");
@@ -58,6 +55,10 @@ async function on_box_contextmenu(event, box, name, properties, node_id=[]) {
 
 
 async function add_node_options(box, name, properties, node_id) {
+    const safe_properties = { ...properties };
+    if (safe_properties.tooltip)
+        delete safe_properties["tooltip"]
+
     add_button("Go to subtree at branch", () => {
         view.subtree += (view.subtree ? "," : "") + node_id;
         on_tree_change();
@@ -71,19 +72,19 @@ async function add_node_options(box, name, properties, node_id) {
                     text += `${k}: ${v}<br>`;
             });
         text += "</div>";
-        Swal.fire({ 
-            html: `${text}`, 
+        Swal.fire({
+            html: `${text}`,
             showConfirmButton: false });
     }, "", "info", false);
     add_button("Download branch as newick", () => download_newick(node_id),
                "Download subtree starting at this node as a newick file.",
                "download", false);
-    const nid = get_tid() + "," + node_id;
+    const nid = get_tid() + (node_id.length > 0 ? ("," + node_id) : "");
     const nseq = Number(await api(`/trees/${nid}/nseq`));
     if (nseq > 0)
         add_button("Download " + (nseq === 1 ? "sequence" : `leaf sequences (${nseq})`),
             () => download_seqs(node_id),
-                   "Download " + (nseq === 1 ? "sequence" : `leaf sequences (${nseq})`) 
+                   "Download " + (nseq === 1 ? "sequence" : `leaf sequences (${nseq})`)
                                + " as fasta file.",
                    "download", false);
     if ("taxid" in properties) {
@@ -110,7 +111,7 @@ async function add_node_options(box, name, properties, node_id) {
                    "Remove current node from active selection.",
                    "unselect", false);
     else
-        add_button("Select node <span>Alt+Click</span>", () => activate_node(node_id, properties, "nodes"),
+        add_button("Select node <span>Alt+Click</span>", () => activate_node(node_id, safe_properties, "nodes"),
                    "Add current node from active selection.",
                    "hand", false);
 
@@ -120,19 +121,21 @@ async function add_node_options(box, name, properties, node_id) {
                    "Remove current clade from active selection.",
                    "unselect", false);
     else
-        add_button("Select clade <span>Shift+Click</span>", () => activate_node(node_id, properties, "clades"),
+        add_button("Select clade <span>Shift+Click</span>", () => activate_node(node_id, safe_properties, "clades"),
                    "Add current clade from active selection.",
                    "hand", false);
 
     if ("hyperlink" in properties) {
         const [ label, url ] = properties["hyperlink"];
-        add_button("Go to " + label, () => window.open(url), 
+        add_button("Go to " + label, () => window.open(url),
             url, "external-link-alt");
     }
 
     if (view.allow_modifications) {
         const nodestyle = await api(`/trees/${nid}/nodestyle`);
-        add_node_modifying_options(properties, nodestyle, node_id);
+        //const editable_props = await api(`/trees/${nid}/editable_props`);
+        const editable_props = undefined;
+        add_node_modifying_options(editable_props, nodestyle, node_id);
     }
 }
 
@@ -181,7 +184,7 @@ const NODESTYLE = {
         size: "Size",
         fgcolor: "Color",
         fgopacity: "Opacity",
-    }, 
+    },
     background : {
         bgcolor: "Color",
     },
@@ -255,21 +258,48 @@ function format_nodestyle(style) {
 async function add_node_modifying_options(properties, nodestyle, node_id) {
     const nid = get_tid() + "," + node_id;
     nodestyle = format_nodestyle(nodestyle);
-    add_button("Edit node properties", () =>
-        add_json_editor(nid, properties, "update_props", true, "properties"),
-       "Edit the properties of this node. Changes the tree structure.",
-       "edit", true);
+    if (properties)
+        add_button("Edit node properties", () =>
+            add_json_editor(nid, properties, "update_props", true, "properties"),
+           "Edit the properties of this node. Changes the tree structure.",
+           "edit", true);
     add_button("Edit node style", () => {
         const html = get_nodestyle_html(nodestyle);
         add_json_editor(nid, nodestyle, "update_nodestyle", false, "style", html)},
        "Edit the style of this node. Changes the tree structure.",
        "edit", false);
-    if (!view.subtree) {
-        add_button("Root on this node", async () => {
-            await tree_command("root_at", node_id);
+    add_button("Rename node", async () => {
+        const result = await Swal.fire({
+            input: "text",
+            inputPlaceholder: "Enter new name",
+            preConfirm: async name => {
+                return await tree_command("rename", [node_id, name]);
+            },
+        });
+        if (result.isConfirmed)
+            update();
+    }, "Change the name of this node. Changes the tree structure.",
+       "edit", true);
+    add_button("Edit node", async () => {
+        const result = await Swal.fire({
+            input: "text",
+            inputPlaceholder: "Enter content (in newick format)",
+            preConfirm: async content => {
+                return await tree_command("edit", [node_id, content]);
+            },
+        });
+        if (result.isConfirmed) {
             draw_minimap();
             update();
-        }, "Set this node as the root of the tree. Changes the tree structure.",
+        }
+    }, "Edit the content of this node. Changes the tree structure.",
+       "edit", true);
+    if (!view.subtree) {
+        add_button("Set node as outgroup", async () => {
+            await tree_command("set_outgroup", node_id);
+            draw_minimap();
+            update();
+        }, "Set this node as the 1st child of the root. Changes the tree structure.",
            "root", true);
     }
     add_button("Move branch up", async () => {
@@ -313,7 +343,7 @@ function add_tree_options() {
     if (view.allow_modifications) {
         add_button("Sort tree", () => sort(),
             "Sort all branches according to the current sorting function. " +
-            "Changes the tree structure.", 
+            "Changes the tree structure.",
             "sort", true);
         if (!view.subtree) {
             add_button("Reload tree", async () => {
@@ -341,7 +371,7 @@ function add_button(text, fn, tooltip, icon_before, icon_warning=false) {
     const content = document.createElement("div");
     content.innerHTML = text;
     button.appendChild(content)
-    if (icon_warning) 
+    if (icon_warning)
         button.appendChild(create_icon("exclamation"))
     button.addEventListener("click", event => {
         div_contextmenu.style.visibility = "hidden";

@@ -1,30 +1,23 @@
-build
-*.pyc
-*~
-#*#
-doc/_build/
-sdoc/_build/
-dist/
-*.egg-info
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# C extensions
 *.c
 *.so
 
-# Conda testing environment
-miniconda.sh
-miniconda/
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Sphinx documentation
+doc/_build/
 
 # Test files
-tests.log
 test.png
 test.pdf
 test.svg
-testdb.sqlite*
-ete_test_tmp/
-test_tmp/
-
-# Coverage files
-.coverage
-htmlcov/
 
 # MacOSX
 .DS_Store

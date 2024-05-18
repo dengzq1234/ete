@@ -1,55 +1,9 @@
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
-from __future__ import print_function
-
 import sys
 import operator
 import re
 
-__CITATION__ = '''#       ** If you use this software for a published work, please cite: **
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon. ETE: a python Environment
-# for Tree Exploration. BMC Bioinformatics 2010, 11:24. doi: 10.1186/1471-2105-11-24.'''
-
-
 LOG_LEVEL = 2
+
 
 class ArgError(ValueError):
     def __init__(self, value):
@@ -60,7 +14,7 @@ class ArgError(ValueError):
     pass
 
 
-class Logger(object):
+class Logger:
     def __init__(self, buff):
         self.out = buff
 
@@ -160,11 +114,11 @@ def parse_value(fvalue):
         func_arg = func_match.groups()[1]
     #RETURN SOMETHING
 
-def dump(t, features=None):
+def dump(t, properties=None):
     #if getattr(args, "output", None):
     #    t.write(format=0, features=features)
     #else:
-    print(t.write(format=0, features=features))
+    print(t.write(parser=0, props=properties))
 
 def populate_main_args(main_args_p):
     main_args = main_args_p.add_argument_group('GENERAL OPTIONS')
@@ -191,8 +145,7 @@ def populate_source_args(source_args_p):
 
     source_args.add_argument("-t", dest='src_trees',
                              type=str, nargs="*",
-                             help=("a list of trees in newick format (filenames or"
-                             " quoted strings)"))
+                             help=("a list of files with trees in newick format"))
 
     source_args.add_argument("--src_tree_list", dest="src_tree_list",
                              type=str,
@@ -207,14 +160,13 @@ def populate_source_args(source_args_p):
                              help=("Perl regular expression wrapping the portion of the target attribute that should be used."))
 
     source_args.add_argument('--src_tree_format', dest='src_newick_format', type=int, default=0)
-    
+
 def populate_ref_args(ref_args_p):
     ref_args = ref_args_p.add_argument_group('REFERENCE TREES')
 
     ref_args.add_argument("-r", dest="ref_trees",
                            type=str, nargs="*",
-                           help=("One or more reference trees in newick format (filename"
-                                 " or quoted string"))
+                           help=("Files with reference trees in newick format"))
 
     ref_args.add_argument("--ref_tree_list", dest="ref_tree_list",
                              type=str,
@@ -229,28 +181,28 @@ def populate_ref_args(ref_args_p):
                            help=("Perl regular expression wrapping the portion of the target attribute that should be used."))
 
     ref_args.add_argument('--ref_tree_format', dest='ref_newick_format', type=int, default=0)
-    
+
 
 def src_tree_iterator(args):
     if not args.src_trees and not sys.stdin.isatty():
         log.debug("Reading trees from standard input...")
         args.src_trees = sys.stdin
-        
+
     if args.src_trees:
         for stree in args.src_trees:
             yield stree.strip()
     elif args.src_tree_list:
         for line in open(args.src_tree_list):
             line = line.strip()
-            if line: 
+            if line:
                 yield line
 
 def ref_tree_iterator(args):
     if args.ref_trees:
-        for stree in args.ref_trees:            
+        for stree in args.ref_trees:
             yield stree
     elif args.ref_tree_list:
         for line in open(args.ref_tree_list):
             line = line.strip()
-            if line: 
+            if line:
                 yield line

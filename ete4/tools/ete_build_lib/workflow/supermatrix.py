@@ -1,44 +1,3 @@
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
-from __future__ import print_function
-
 import logging
 from collections import defaultdict
 
@@ -58,23 +17,23 @@ def annotate_node(t, final_task):
     cladeid2node = {}
     # Annotate cladeid in the whole tree
     for n in t.traverse():
-        if n.is_leaf():
-            n.add_feature("realname", db.get_seq_name(n.name))
+        if n.is_leaf:
+            n.add_property("realname", db.get_seq_name(n.name))
             #n.name = n.realname
         if hasattr(n, "cladeid"):
             cladeid2node[n.cladeid] = n
 
     alltasks = GLOBALS[final_task.configid]["_nodeinfo"][final_task.nodeid]["tasks"]
     npr_iter = get_iternumber(final_task.threadid)
-    n = cladeid2node[t.props.get('cladeid')]
-    n.add_features(size=final_task.size)
+    n = cladeid2node[t.cladeid]
+    n.add_properties(size=final_task.size)
     for task in alltasks:
         params = ["%s %s" %(k,v) for k,v in  task.args.items()
                   if not k.startswith("_")]
         params = " ".join(params)
 
         if task.ttype == "tree":
-            n.add_features(tree_model=task.model,
+            n.add_properties(tree_model=task.model,
                            tree_seqtype=task.seqtype,
                            tree_type=task.tname,
                            tree_cmd=params,
@@ -83,13 +42,13 @@ def annotate_node(t, final_task):
                            npr_iter=npr_iter)
 
         elif task.ttype == "treemerger":
-            n.add_features(treemerger_type=task.tname,
-                           treemerger_rf="RF=%s [%s]" %(task.rf[0], task.rf[1]),
-                           treemerger_out_match_dist = task.outgroup_match_dist,
-                           treemerger_out_match = task.outgroup_match)
+            n.add_properties(treemerger_type=task.tname,
+                             treemerger_rf="RF=%s [%s]" %(task.rf[0], task.rf[1]),
+                             treemerger_out_match_dist = task.outgroup_match_dist,
+                             treemerger_out_match = task.outgroup_match)
 
         elif task.ttype == "concat_alg":
-            n.add_features(concatalg_cogs="%d"%task.used_cogs,
+            n.add_properties(concatalg_cogs="%d"%task.used_cogs,
                            alg_path=task.alg_fasta_file)
 
 def process_task(task, wkname, npr_conf, nodeid2info):
@@ -232,7 +191,7 @@ def process_task(task, wkname, npr_conf, nodeid2info):
                             colorify(', '.join(["%s"%tax2name[x] for x in broken_clades]), "wr"))
                     target_cladeids = set()
                     for branch in broken_branches:
-                        print(branch.get_ascii(attributes=['spname', 'taxid'], compact=True))
+                        print(branch.get_ascii(properties=['spname', 'taxid'], compact=True))
                         print(["%s"%tax2name[x] for x in broken_branches[branch]])
                         target_cladeids.add(branch.cladeid)
 
@@ -283,4 +242,3 @@ def pipeline(task, wkname, conf=None):
     logindent(-2)
 
     return new_tasks
-

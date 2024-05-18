@@ -2,7 +2,7 @@
 
 import { view, get_tid, on_box_click, on_box_wheel,
          on_box_mouseenter, on_box_mouseleave,
-         get_active_layouts } from "./gui.js";
+         get_active_layouts, tree_command, reset_view } from "./gui.js";
 import { update_minimap_visible_rect } from "./minimap.js";
 import { colorize_active, get_active_class } from "./active.js";
 import { colorize_searches, get_search_class } from "./search.js";
@@ -11,7 +11,8 @@ import { on_box_contextmenu } from "./contextmenu.js";
 import { api } from "./api.js";
 import { draw_pixi, clear_pixi } from "./pixi.js";
 
-export { update, draw_tree, draw_tree_scale, draw_aligned, draw, get_class_name, cartesian_shifted, update_aligned_panel_display };
+export { update, draw_tree, draw_tree_scale, draw_aligned, draw, get_class_name,
+         cartesian_shifted, update_aligned_panel_display };
 
 
 // Update the view of all elements (gui, tree, minimap).
@@ -26,7 +27,7 @@ function get_tree_params() {
     const [zx, zy, za] = [view.zoom.x, view.zoom.y, view.zoom.a];
     const [x, y] = [view.tl.x, view.tl.y];
     const [w, h] = [div_tree.offsetWidth / zx, div_tree.offsetHeight / zy];
-    
+
     const layouts = JSON.stringify(get_active_layouts());
 
     const params_rect = {  // parameters we have to pass to the drawer
@@ -50,7 +51,32 @@ var align_drawing = false;
 // Ask the server for a tree in the new defined region, and draw it.
 async function draw_tree() {
     div_tree.style.cursor = "wait";
+
     const params = get_tree_params();
+
+    // Fix the tree if it has zero width.
+    if (params.w <= 0) {
+        const result = await Swal.fire({
+            icon: "error",
+            html: `Cannot draw tree with width ${params.w}`,
+            confirmButtonText: "Convert to ultrametric (equidistant leaves)",
+            showDenyButton: true,
+            denyButtonText: "Convert to dendrogram (remove all distances)",
+            showCancelButton: true,
+        });
+
+        if (result.isConfirmed) {
+            await tree_command("to_ultrametric", []);
+            reset_view();
+        }
+        else if (result.isDenied) {
+            await tree_command("to_dendrogram", []);
+            reset_view();
+        }
+
+        return;
+    }
+
     const qs = new URLSearchParams(params).toString();  // "x=...&y=..."
 
     try {
@@ -73,8 +99,10 @@ async function draw_tree() {
 
         update_aligned_panel_display();
 
+        await draw_legend(params)
+
         if (view.drawer.npanels > 1) {
-            align_timeout = setTimeout(async () => { 
+            align_timeout = setTimeout(async () => {
                 if (!align_drawing)
                     await draw_aligned(params);
                 clearTimeout(align_timeout);
@@ -125,9 +153,9 @@ function draw_tree_scale() {
             "stroke-width": view.tree_scale.width,
         });
     }
-    
+
     function create_text(text) {
-        const t = create_svg_element("text", { 
+        const t = create_svg_element("text", {
             "font-size": view.tree_scale.fsize,
             "fill": view.tree_scale.color,
             x: x0 + length + 10,
@@ -187,16 +215,17 @@ function draw(element, items, tl, zoom, replace=true) {
 
     const svg_items = items.filter(is_svg);
     svg_items.forEach(item => g.appendChild(create_item(g, item, tl, zoom)));
-    
+
     const pixi_container = view.drawer.type === "circ" ? div_tree : element;
     const pixi_items = items.filter(i => i[0].includes("pixi-"));
-    if (pixi_items.length) {
+    if (pixi_items.length > 0) {
         const pixi = draw_pixi(pixi_container, pixi_items, tl, zoom)
         pixi.style.transform = "translate(0, 0)";
         replace_child(pixi_container.querySelector(".div_pixi"), pixi);
 
-    } else if (replace)
+    } else if (replace) {
         clear_pixi(pixi_container);
+    }
 
     const html_container = element.querySelector(".div_html")
     if (html_container) {
@@ -274,6 +303,32 @@ function update_aligned_panel_display() {
         div_aligned.style.display = "none";  // hide aligned panel
 }
 
+
+
+async function draw_legend(params) {
+    if (!params)
+        params = get_tree_params();
+    const qs = new URLSearchParams({
+        ...params, "panel": -1,
+    }).toString();
+
+    const items = await api(`/trees/${get_tid()}/draw?${qs}`);
+
+    if (items.length) {
+        const div = document.createElement("div");
+        div.style["margin-top"] = "-15px";
+        items.forEach(item => {
+            const entry = create_legend_entry(item);
+            if (entry)
+                div.appendChild(entry);
+        });
+        replace_child(div_legend, div);
+        div_legend_container.style.display = "block";
+    } else
+        div_legend_container.style.display = "none";
+
+}
+
 // Draw elements that belong to panels above 0.
 async function draw_aligned(params, npanels) {
     if (!params)
@@ -281,14 +336,14 @@ async function draw_aligned(params, npanels) {
 
     const zx = view.zoom.a;
     const zy = view.zoom.y;
-    const panels = { 
+    const panels = {
         1: { div: div_aligned, show: true,
-             params: { x: view.aligned.x, y: view.tl.y, w: div_aligned.offsetWidth / zx } }, 
+             params: { x: view.aligned.x, y: view.tl.y, w: div_aligned.offsetWidth / zx } },
 
         2: { div: div_aligned_header, show: view.aligned.header.show,
              params: { x: view.aligned.x, y: 0,
                  w: div_aligned.offsetWidth / zx,
-                 h: Math.max(-view.tl.y, view.aligned.header.height / zy) } }, 
+                 h: Math.max(-view.tl.y, view.aligned.header.height / zy) } },
 
         3: { div: div_aligned_footer, show: view.aligned.footer.show,
              params: { x: view.aligned.x, y: 0,
@@ -302,7 +357,7 @@ async function draw_aligned(params, npanels) {
         for (let panel_n = 1; panel_n < npanels; panel_n++) {
             const panel = panels[panel_n];
             const qs = new URLSearchParams({
-                ...params, ...panel.params, "panel": panel_n
+                ...params, ...panel.params, "panel": panel_n,
             }).toString();
 
             align_drawing = true;
@@ -326,7 +381,7 @@ async function draw_aligned(params, npanels) {
 
             // NOTE: Only implemented for panel=1 for the moment. We just need to
             //   decide where the graphics would go for panel > 1 (another div? ...)
-            
+
         }
     }
     else {
@@ -358,7 +413,7 @@ function get_node_class(t) {
 function create_item(g, item, tl, zoom) {
     // item looks like ["line", ...] for a line, etc.
 
-    const [zx, zy] = [zoom.x, zoom.y];  // shortcut 
+    const [zx, zy] = [zoom.x, zoom.y];  // shortcut
     if (item[0] === "nodebox") {
         const [ , box, name, properties, node_id, result_of, style] = item;
 
@@ -409,9 +464,9 @@ function create_item(g, item, tl, zoom) {
         return b;
     }
     else if (item[0] === "outline") {
-        const [ , sbox, style] = item;
+        const [ , box, style] = item;
 
-        const outline = create_outline(sbox, tl, zx, zy);
+        const outline = create_outline(box, tl, zx, zy);
 
         style_outline(outline, style);
 
@@ -456,7 +511,7 @@ function create_item(g, item, tl, zoom) {
             const angle = Math.atan2(zy * tl.y + cy, zx * tl.x + cx) * 180 / Math.PI;
             addRotation(ellipse, angle, cx, cy);
         }
-        
+
         style_polygon(ellipse, style);
 
         ellipse.setAttribute("data-tooltip", tooltip);
@@ -469,11 +524,11 @@ function create_item(g, item, tl, zoom) {
         const triangle = create_triangle(box, tip, tl, zx, zy, type);
 
         const [r, a, dr, da] = box;
-        if (view.drawer.type === "circ" 
+        if (view.drawer.type === "circ"
             && ["top", "bottom"].includes(tip)
             && (Math.abs(a + da) > Math.PI / 2)) {
             const {x: cx, y: cy} = cartesian_shifted(r + dr / 2,
-                                                     a + da / 2, 
+                                                     a + da / 2,
                                                      tl, zx);
             addRotation(triangle, 180, cx, cy);
         }
@@ -539,18 +594,19 @@ function create_item(g, item, tl, zoom) {
         return slice;
     }
     else if (item[0] === "array") {
-        const [ , box, array] = item;
-        const [x0, y0, dx0, dy0] = box;
+        const [ , box, array, tooltip] = item;
+        const [x0, y, dx0, dy] = box;
         const dx = dx0 / array.length / zx;
-
-        const [y, dy] = pad(y0, dy0, view.array.padding);
 
         const g = create_svg_element("g");
         for (let i = 0, x = x0; i < array.length; i++, x+=dx) {
             const r = view.drawer.type === "rect" ?
-                create_rect([x, y, dx, dy], tl, zx, zy) :
-                create_asec([x, y, dx, dy], tl, zx);
-            r.style.stroke = `hsl(${array[i]}, 100%, 50%)`;
+                create_rect([x, y, dx, dy], tl, zx, zy, "", {rounded: null}) :
+                create_asec([x, y, dx, dy], tl, zx, "", {id: null});
+            r.style.fill = array[i];
+            if (tooltip) {
+                r.setAttribute("data-tooltip", tooltip);
+            }
             g.appendChild(r);
         }
 
@@ -568,12 +624,12 @@ function create_html(container, item, tl, zoom) {
 
     const [x, y, dx, dy] = item[1];
     const [zx, zy] = [zoom.x, zoom.y];
-    const style = { 
+    const style = {
         position: "absolute",
         overflow: "hidden",
         top: zy * (y - tl.y) + "px",
         left: zx * (x - tl.x) + "px",
-        width: dx * zx + "px", 
+        width: dx * zx + "px",
         height: dy * zy + "px"
     };
 
@@ -586,12 +642,12 @@ function create_img(container, item, tl, zoom) {
 
     const [x, y, dx, dy] = item[1];
     const [zx, zy] = [zoom.x, zoom.y];
-    const style = { 
+    const style = {
         position: "absolute",
         overflow: "hidden",
         top: zy * (y - tl.y) + "px",
         left: zx * (x - tl.x) + "px",
-        width: dx * zx + "px", 
+        width: dx * zx + "px",
         height: dy * zy + "px"
     };
 
@@ -607,12 +663,89 @@ function get_class_name(type) {
 }
 
 
-// Transform the interval [y0, y0+dy0] into one padded with the given fraction.
-function pad(y0, dy0, fraction) {
-    const dy = dy0 * (1 - fraction);
-    return [y0 + (dy0 - dy)/2, dy]
+function create_legend_entry_container(entry) {
+    const div = document.createElement("div");
+    div.classList.add("legend-entry");
+
+    const title = document.createElement("div")
+    title.innerText = entry.title;
+    title.classList.add("legend-title");
+    div.appendChild(title);
+
+    return div;
 }
 
+function create_discrete_legend_entry(entry) {
+    const div = create_legend_entry_container(entry);
+
+    const items = document.createElement("div")
+    items.classList.add("legend-items");
+    Object.entries(entry.colormap).forEach(([text, color]) => {
+        const item = document.createElement("div")
+        item.classList.add("legend-item");
+
+        const circle = document.createElement("span");
+        circle.classList.add("legend-color");
+        circle.style.background = color;
+        item.appendChild(circle);
+
+        item.appendChild(document.createTextNode(text));
+        items.appendChild(item);
+    });
+    div.appendChild(items);
+
+    return div;
+}
+
+function create_continuous_legend_entry(entry) {
+    function format_numbers(arr) {
+        return arr.map(num => {
+            num = +num
+            if (num === 0)
+                return num
+
+            const rounded = num < 0.01
+                ? num.toExponential(0)
+                : num.toFixed(3);
+            return rounded ? rounded : num
+        })
+    }
+    const div = create_legend_entry_container(entry);
+
+    const item = document.createElement("div")
+    item.classList.add("legend-item");
+    item.style["margin-left"] = "10px";
+
+    const [v1, v2] = format_numbers(entry.value_range);
+    const value_top = document.createElement("div");
+    value_top.classList.add("legend-range");
+    value_top.appendChild(document.createTextNode(v2))
+    item.appendChild(value_top);
+
+    const rect = document.createElement("span");
+    rect.classList.add("legend-gradient");
+    const colorRange = entry.color_range.join(',')
+    rect.style["background-image"] = `linear-gradient(${colorRange})`;
+    rect.style["border-radius"] = "1px";
+    item.appendChild(rect);
+
+    const value_bottom = document.createElement("div");
+    value_bottom.classList.add("legend-range");
+    value_bottom.appendChild(document.createTextNode(v1))
+    item.appendChild(value_bottom);
+
+
+    div.appendChild(item);
+
+    return div;
+}
+
+function create_legend_entry(entry) {
+    if (entry.variable === "discrete")
+        return create_discrete_legend_entry(entry)
+    else if (entry.variable === "continuous")
+        return create_continuous_legend_entry(entry)
+}
 
 function create_svg_element(name, attrs={}) {
     const element = document.createElementNS("http://www.w3.org/2000/svg", name);
@@ -668,7 +801,7 @@ function create_asec(box, tl, z, type, style) {
 
     if (is_style_property(style.id))
         element.id = style.id;
-    
+
     return create_svg_element("path", element);
 }
 
@@ -680,24 +813,22 @@ function cartesian_shifted(r, a, tl, z) {
 
 
 // Return an outline (collapsed version of a box).
-function create_outline(sbox, tl, zx, zy) {
+function create_outline(box, tl, zx, zy) {
     if (view.drawer.type === "rect")
-        return create_rect_outline(sbox, tl, zx, zy);
+        return create_rect_outline(box, tl, zx, zy);
     else
-        return create_circ_outline(sbox, tl, zx);
+        return create_circ_outline(box, tl, zx);
 }
 
 
 // Return a svg horizontal outline.
-function create_rect_outline(sbox, tl, zx, zy) {
-    const [x, y, dx_min, dx_max, dy] = transform_sbox(sbox, tl, zx, zy);
-
-    const dx = view.outline.slanted ? dx_min : dx_max;
+function create_rect_outline(box, tl, zx, zy) {
+    const [x, y, dx, dy] = transform_box(box, tl, zx, zy);
 
     return create_svg_element("path", {
         "class": "outline",
         "d": `M ${x} ${y + dy/2}
-              L ${x + dx_max} ${y}
+              L ${x + dx} ${y}
               L ${x + dx} ${y + dy}
               L ${x} ${y + dy/2}`,
     });
@@ -709,29 +840,21 @@ function transform_box(box, tl, zx, zy) {
     return [zx * (x - tl.x), zy * (y - tl.y), zx * dx, zy * dy];
 }
 
-// Return the sbox translated (from tl) and scaled.
-function transform_sbox(sbox, tl, zx, zy) {
-    const [x, y, dx_min, dx_max, dy] = sbox;
-    return [zx * (x - tl.x), zy * (y - tl.y), zx * dx_min, zx * dx_max, zy * dy];
-}
-
 
 // Return a svg outline in the direction of an annular sector.
-function create_circ_outline(sbox, tl, z) {
-    const [r, a, dr_min, dr_max, da] = sbox;
-
-    const dr = view.outline.slanted ? dr_min : dr_max;
+function create_circ_outline(box, tl, z) {
+    const [r, a, dr, da] = box;
 
     const large = da > Math.PI ? 1 : 0;
     const p0 = cartesian_shifted(r, a + da/2, tl, z),
-          p10 = cartesian_shifted(r + dr_max, a, tl, z),
+          p10 = cartesian_shifted(r + dr, a, tl, z),
           p11 = cartesian_shifted(r + dr, a + da, tl, z);
 
     return create_svg_element("path", {
         "class": "outline",
         "d": `M ${p0.x} ${p0.y}
               L ${p10.x} ${p10.y}
-              A ${z * (r + dr_max)} ${z * (r + dr)} 0 ${large} 1 ${p11.x} ${p11.y}
+              A ${z * (r + dr)} ${z * (r + dr)} 0 ${large} 1 ${p11.x} ${p11.y}
               L ${p0.x} ${p0.y}`,
     });
 }
@@ -783,9 +906,9 @@ function create_arc(p1, p2, large, tl, z, type="") {
 function create_circle(center, radius, tl, zx, zy, type="") {
     // Could be merged with create_ellipse()
     const [cx, cy] = center;
-    if (view.drawer.type === "rect") 
+    if (view.drawer.type === "rect")
         var [x, y] = [zx * (cx - tl.x), zy * (cy - tl.y)]
-    else 
+    else
         var {x, y} = cartesian_shifted(cx, cy, tl, zx);
 
     return create_svg_element("circle", {
@@ -797,9 +920,9 @@ function create_circle(center, radius, tl, zx, zy, type="") {
 
 function create_ellipse(center, rx, ry, tl, zx, zy, type="") {
     const [cx, cy] = center;
-    if (view.drawer.type === "rect") 
+    if (view.drawer.type === "rect")
         var [x, y] = [zx * (cx - tl.x), zy * (cy - tl.y)]
-    else 
+    else
         var {x, y} = cartesian_shifted(cx, cy, tl, zx);
 
     return create_svg_element("ellipse", {
@@ -810,7 +933,7 @@ function create_ellipse(center, rx, ry, tl, zx, zy, type="") {
 
 
 function create_slice(center, r, a, da, tl, zx, zy, type="", style) {
-    
+
     // Calculate center to translate slice
     const c = view.drawer.type === "rect"
         ? { x: zx * (center[0] - tl.x), y: zy * (center[1] - tl.y) }
@@ -832,7 +955,7 @@ function create_slice(center, r, a, da, tl, zx, zy, type="", style) {
 
     if (is_style_property(style.id))
         element.id = style.id;
-    
+
     return create_svg_element("path", element);
 }
 
@@ -868,8 +991,8 @@ function create_triangle(box, tip, tl, zx, zy, type="") {
 
     if (tip === "top")
         points.push(
-            [x + dx/2, y], 
-            [x, y + dy], 
+            [x + dx/2, y],
+            [x, y + dy],
             [x + dx, y + dy]);
     if (tip === "right")
         points.push(
@@ -879,15 +1002,15 @@ function create_triangle(box, tip, tl, zx, zy, type="") {
     if (tip === "bottom")
         points.push(
             [x, y],
-            [x + dx/2, y + dy], 
+            [x + dx/2, y + dy],
             [x + dx, y]);
     if (tip === "left")
         points.push(
-            [x, y + dy/2], 
+            [x, y + dy/2],
             [x + dx, y + dy],
             [x + dx, y]);
 
-    if (view.drawer.type === "circ") 
+    if (view.drawer.type === "circ")
         points.forEach((point, idx, arr) => {
             const [r, a] = point;
             const {x: px, y: py} = cartesian_shifted(r, a, tl, zx);
@@ -905,7 +1028,7 @@ function create_text(box, rotation, text, fs, tl, zx, zy, type="", anchor, style
 
     const element = {
         "class": "text " + type,
-        "text-anchor": (style && style.text_anchor 
+        "text-anchor": (style && style.text_anchor
                         ? style.text_anchor : "left"),
         "font-size": `${fs}px`,
     }
@@ -1039,7 +1162,7 @@ function is_style_property(property) {
 
 function style_line(line, style) {
     if (is_style_property(style.type))
-        line.style["stroke-dasharray"] = style.type === "solid" 
+        line.style["stroke-dasharray"] = style.type === "solid"
             ? null : style.type == "dotted"
             ? 2 : 5;
 

@@ -1,43 +1,3 @@
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
-
 import numpy
 from math import sqrt
 
@@ -80,7 +40,7 @@ def get_silhouette_width(fdist, cluster):
     for st in sisters:
         if st.profile is None:
             continue
-        for i in cluster.iter_leaves():
+        for i in cluster.leaves():
             # Skip nodes without profile
             if i._profile is not None:
                 # item intraclsuterdist -> Centroid Diameter
@@ -106,8 +66,8 @@ def get_avg_profile(node):
     """ This internal function updates the mean profile
     associated to an internal node. """
 
-    if not node.is_leaf():
-        leaf_vectors = [n._profile for n in  node.get_leaves() \
+    if not node.is_leaf:
+        leaf_vectors = [n._profile for n in  node.leaves() \
                             if n._profile is not None]
         if len(leaf_vectors)>0:
             node._profile, node._std_profile = safe_mean_vector(leaf_vectors)
@@ -133,7 +93,7 @@ def get_dunn_index(fdist, *clusters):
 
     intra_dist = []
     for c in clusters:
-        for i in c.get_leaves():
+        for i in c.leaves():
             if i is not None:
                 # item intraclsuterdist -> Centroid Diameter
                 a = fdist(i.profile, c.profile)*2

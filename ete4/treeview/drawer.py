@@ -1,52 +1,13 @@
-from __future__ import absolute_import
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
 import types
 import signal
 
 from .qt import *
 
-from .qt4_gui import _GUI, _PropertiesDialog, _BasicNodeActions
+from .qt_gui import _GUI, _PropertiesDialog, _BasicNodeActions
 
 from . import layouts
 from .main import save
-from .qt4_render import _TreeScene, render, get_tree_img_map, init_tree_style
+from .qt_render import _TreeScene, render, get_tree_img_map, init_tree_style
 
 __all__ = ["show_tree", "render_tree"]
 
@@ -66,8 +27,8 @@ def init_scene(t, layout, ts):
     if not _QApp:
         _QApp = QApplication(["ETE"])
 
-    scene  = _TreeScene()
-	#ts._scale = None
+    scene = _TreeScene()
+
     return scene, ts
 
 def show_tree(t, layout=None, tree_style=None, win_name=None):
@@ -91,7 +52,7 @@ def show_tree(t, layout=None, tree_style=None, win_name=None):
         signal.signal(signal.SIGALRM, exit_gui)
         signal.alarm(GUI_TIMEOUT)
 
-    _QApp.exec_()
+    _QApp.exec()
 
 def render_tree(t, imgName, w=None, h=None, layout=None,
                 tree_style = None, header=None, units="px",

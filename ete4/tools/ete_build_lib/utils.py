@@ -1,46 +1,3 @@
-# -*- coding: utf-8 -*-
-
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
-from __future__ import print_function
-
 import sys
 from os import kill
 from os.path import join as pjoin
@@ -103,7 +60,7 @@ GLOBALS = {
                          # used them within the same get_status cycle
 }
 
-class _DataTypes(object):
+class _DataTypes:
     def __init__(self):
         self.msf = 100
         self.alg_fasta = 200
@@ -137,10 +94,10 @@ from collections import OrderedDict
 
 # ete3 should be added to the python path by the npr script
 from ...phylo import PhyloTree
-from ...coretype.tree import Tree
-from ...coretype.seqgroup import SeqGroup
+from ete4.core.tree import Tree
+from ete4.core.seqgroup import SeqGroup
 from ...parser.fasta import read_fasta
-from ...coretype import tree
+from ete4.core import tree
 from ...ncbi_taxonomy import ncbiquery as ncbi
 
 # This default values in trees are Very important for outgroup
@@ -231,13 +188,13 @@ def merge_arg_dicts(source, target, parent=""):
     return target
 
 def load_node_size(n):
-    if n.is_leaf():
+    if n.is_leaf:
         size = 1
     else:
         size = 0
         for ch in n.children:
             size += load_node_size(ch)
-    n.add_feature("_size", size)
+    n.add_property("_size", size)
     return size
 
 def render_tree(tree, fname):
@@ -413,7 +370,7 @@ def print_as_table(rows, header=None, fields=None, print_header=True, stdout=sys
             for i,iv in enumerate(fields):
                 #print >>stdout, _str(r[iv]).rjust(lengths[i])+" | ",
                 print(_safe_rjust(_str(r[iv]), lengths[i])+" | ", end=' ', file=stdout)
-            print("", file=stdout)                
+            print("", file=stdout)
 
     elif vtype == dict:
         if header == []:
@@ -539,7 +496,7 @@ def get_latest_nprdp(basedir):
     return None
 
 def npr_layout(node):
-    if node.is_leaf():
+    if node.is_leaf:
         name = faces.AttrFace("name", fsize=12)
         faces.add_face_to_node(name, node, 0, position="branch-right")
         if hasattr(node, "sequence"):
@@ -547,7 +504,7 @@ def npr_layout(node):
             faces.add_face_to_node(seq_face, node, 0, position="aligned")
 
 
-    if "treemerger_type" in node.features:
+    if "treemerger_type" in node.properties:
         ttype=faces.AttrFace("tree_type", fsize=8, fgcolor="DarkBlue")
         faces.add_face_to_node(ttype, node, 0, position="branch-top")
         #ttype.background.color = "DarkOliveGreen"
@@ -586,7 +543,7 @@ def npr_layout(node):
 
 try:
     from ... import TreeStyle, NodeStyle, faces
-    from ...treeview import random_color
+    from ...utils import random_color
     NPR_TREE_STYLE = TreeStyle()
     NPR_TREE_STYLE.layout_fn = npr_layout
     NPR_TREE_STYLE.show_leaf_name = False
@@ -624,7 +581,7 @@ def colorify(string, color):
 def clear_color(string):
     return re.sub("\\033\[[^m]+m", "", string)
 
-    
+
 def iter_cog_seqs(cogs_file, spname_delimiter):
     cog_id = 0
     for line in open(cogs_file):
@@ -647,4 +604,4 @@ def cmp(x, y):
     """cmp() exists in Python 2 but was removed in Python 3.
     This implements the same behavior on both versions.
     """
-    return bool(x > y) - bool(x < y) 
+    return bool(x > y) - bool(x < y)

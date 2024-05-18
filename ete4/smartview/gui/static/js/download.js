@@ -4,19 +4,20 @@ import { view, menus, get_tid } from "./gui.js";
 import { api } from "./api.js";
 import { apps } from "./pixi.js";
 
-export { download_newick, download_seqs, download_image, download_svg, download_pdf };
+export { download_newick, download_seqs, download_svg, download_pdf };
 
 
 
 // Download a file with the newick representation of the tree.
 async function download_newick(node_id) {
-    const nid = get_tid() + (node_id ? "," + node_id : "");
+    const nid = get_tid() + (node_id && node_id.length > 0 ? ("," + node_id) : "");
     const newick = await api(`/trees/${nid}/newick`);
     download(view.tree + ".tree", "data:text/plain;charset=utf-8," + newick);
 }
 
+
 async function download_seqs(node_id) {
-    const nid = get_tid() + (node_id ? "," + node_id : "");
+    const nid = get_tid() + (node_id.length > 0 ? ("," + node_id) : "");
     const fasta = await api(`/trees/${nid}/seq`);
     download(view.tree + ".fasta", "data:text/plain;charset=utf-8," + fasta);
 }
@@ -27,29 +28,41 @@ function getElementToDownload() {
     const element = div_viz.cloneNode(true);
     // Remove aligned panel grabber
     element.querySelector("#div_aligned_grabber").remove();
+    element.querySelector("#div_aligned").style.overflow = "hidden";
     // Add pixi images to clone (canvas not downloadable)
     Object.entries(apps).forEach(([id, app]) => {
         const img = app.renderer.plugins.extract.image(app.stage);
         const container = element.querySelector(`#${id} .div_pixi`);
         container.style.top = app.stage._bounds.minY + "px";
-        container.style.left = `${-view.aligned.x}px`;
+        container.style.left = `${app.stage._bounds.minX}px`;
+        container.style.width = "auto";
         container.replaceChild(img, container.children[0]);
     });
-    
+
     // Remove foreground nodeboxes for faster rendering
     // (Background nodes not excluded as they are purposely styled)
     Array.from(element.getElementsByClassName("fg_node")).forEach(e => e.remove());
+
     return element;
 }
 
 
-// Download a file with the current view of the tree as a svg+xml.
+// Download a file with the current view of the tree as a svg+xml,
+// and another file with the legend.
 function download_svg() {
-    const svg = getElementToDownload();
-    apply_css(svg, document.styleSheets[0]);
-    const svg_xml = (new XMLSerializer()).serializeToString(svg);
-    const content = "data:image/svg+xml;base64," + btoa(svg_xml);
-    download(view.tree + ".html", content);
+    // Download tree
+    const tree_svg = getElementToDownload();
+    apply_css(tree_svg);
+    const tree_xml = (new XMLSerializer()).serializeToString(tree_svg);
+    const tree_content = "data:image/svg+xml;base64," + btoa(tree_xml);
+    download(view.tree + ".svg", tree_content);
+
+    // Download legend
+    const legend_svg = div_legend.cloneNode(true);
+    apply_css(legend_svg);
+    const legend_xml = (new XMLSerializer()).serializeToString(legend_svg);
+    const legend_content = "data:image/svg+xml;base64," + btoa(legend_xml);
+    download(view.tree + "_legend.svg", legend_content);
 }
 
 
@@ -95,8 +108,42 @@ function download_pdf() {
         if (view.aligned.x > 0)
             addPixiBackground()
     };
-    
+
+    function addLegend() {
+        const legend = toDownload.select(".legend");
+
+        previousWidth += 15
+        let y = 50;
+        const title = legend.select(".legend-title").text();
+        doc.text(title, previousWidth, 10);
+        [...legend.selectAll(".lgnd-entry")].forEach(el => {
+            const clone = select(el);
+            const circle = clone.select("circle");
+            doc.addSVG(circle.node(), previousWidth, y - 1.5);
+
+            const title = clone.select(".form-check-label > *").node();
+            doc.text(title.text, previousWidth + 20, y);
+
+            const description = clone.select(".lgnd-entry-description");
+            const [conservation, descText] = description.text().trim()
+                .split("                    ");
+            doc.text(conservation, previousWidth + 20, y + 15);
+            doc.text(descText, previousWidth + 20, y + 30, {
+                width: 130,
+                height: 50,
+            });
+
+            y += 80;
+        });
+    }
+
     const element = getElementToDownload();
+
+    // Add legend
+    element.appendChild(div_legend.cloneNode(true));
+    // NOTE: We may want to simplify this. Maybe we prefer to have the legend
+    // in a separate file, as we do for download_svg().
+
     const box = div_viz.getBoundingClientRect();
     const doc = new PDFDocument({ size: [ box.width * 3/4, box.height * 3/4 ] });
 
@@ -154,32 +201,14 @@ function download_pdf() {
 }
 
 
-// Download a file with the current view of the tree as a png.
-function download_image() {
-    // dom-to-image dependency
-    domtoimage
-        .toPng(div_viz, {
-            filter: node =>
-            // Remove foreground nodeboxes for faster rendering
-            // (Background nodes not excluded as they are purposely styled)
-            !(node.classList && [...node.classList].includes("fg_node"))
-        })
-        .then(content => download(view.tree + ".png", content));
+// Apply CSS rules to the elements in the given container.
+function apply_css(container) {
+    const style = document.createElement("style");
+    const rules = Array.from(document.styleSheets[0].rules);
+    style.innerHTML = rules.map(r => r.cssText).join("\n");
+    container.appendChild(style);
 }
 
-
-// Apply CSS rules to elements contained in a (cloned) container
-function apply_css(container, stylesheet) {
-    let styles = [];
-    Array.from(stylesheet.rules).forEach(r => {
-        const style = r.cssText;
-        if (style) 
-            styles.push(style);
-    })
-    const style_element = document.createElement("style");
-    style_element.innerHTML = styles.join("\n");
-    container.appendChild(style_element);
-}
 
 // Make the browser download a file.
 function download(fname, content, blob) {

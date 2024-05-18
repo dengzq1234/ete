@@ -1,4 +1,4 @@
-from ....coretype.seqgroup import SeqGroup
+from ete4.core.seqgroup import SeqGroup
 from ..treelayout import TreeLayout
 from ..faces import AlignmentFace, SeqMotifFace, ScaleFace
 
@@ -25,7 +25,7 @@ class LayoutAlignment(TreeLayout):
     def set_tree_style(self, tree, tree_style):
         if self.length:
             face = ScaleFace(width=self.width, scale_range=self.scale_range, padding_y=10)
-            tree_style.aligned_panel_header.add_face(face, column=0)
+            tree_style.aligned_panel_header.add_face(face, column=self.column)
 
     def _get_seq(self, node):
         if self.alignment:
@@ -33,7 +33,7 @@ class LayoutAlignment(TreeLayout):
         return node.props.get("seq", None)
 
     def get_seq(self, node):
-        if node.is_leaf():
+        if node.is_leaf:
             return self._get_seq(node)
 
         if self.summarize_inner_nodes:
@@ -42,7 +42,7 @@ class LayoutAlignment(TreeLayout):
         else:
             first_leaf = next(node.iter_leaves())
             return self._get_seq(first_leaf)
-    
+
     def set_node_style(self, node):
         seq = self.get_seq(node)
 
@@ -50,4 +50,4 @@ class LayoutAlignment(TreeLayout):
             seqFace = AlignmentFace(seq, seq_format=self.format, bgcolor='grey',
                     width=self.width, height=self.height)
             node.add_face(seqFace, column=self.column, position='aligned',
-                    collapsed_only=(not node.is_leaf())) 
+                    collapsed_only=(not node.is_leaf))

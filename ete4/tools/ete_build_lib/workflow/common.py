@@ -1,44 +1,3 @@
-# #START_LICENSE###########################################################
-#
-#
-# This file is part of the Environment for Tree Exploration program
-# (ETE).  http://etetoolkit.org
-#
-# ETE is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ETE is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ETE.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
-#                     ABOUT THE ETE PACKAGE
-#                     =====================
-#
-# ETE is distributed under the GPL copyleft license (2008-2015).
-#
-# If you make use of ETE in published work, please cite:
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon.
-# ETE: a python Environment for Tree Exploration. Jaime BMC
-# Bioinformatics 2010,:24doi:10.1186/1471-2105-11-24
-#
-# Note that extra references to the specific methods implemented in
-# the toolkit may be available in the documentation.
-#
-# More info at http://etetoolkit.org. Contact: huerta@embl.de
-#
-#
-# #END_LICENSE#############################################################
-from __future__ import absolute_import
-from __future__ import print_function
-
 from collections import defaultdict
 import logging
 
@@ -203,7 +162,7 @@ def split_tree(task_tree_node, task_outgroups, main_tree, alg_path, npr_conf, th
                     log.log(20, "Calculating node sequence stats...")
                     mx, mn, avg, std = get_seqs_identity(ALG,
                                                          [__n.name for __n in n2content[_n]])
-                    _n.add_features(seqs_max_ident=mx, seqs_min_ident=mn,
+                    _n.add_properties(seqs_max_ident=mx, seqs_min_ident=mn,
                                     seqs_mean_ident=avg, seqs_std_ident=std)
                     log.log(20, "mx=%s, mn=%s, avg=%s, std=%s" %(mx, mn, avg, std))
 
@@ -216,8 +175,8 @@ def split_tree(task_tree_node, task_outgroups, main_tree, alg_path, npr_conf, th
 
 
             else:
-                _n.add_features(seqs_max_ident=None, seqs_min_ident=None,
-                                seqs_mean_ident=None, seqs_std_ident=None)
+                _n.add_properties(seqs_max_ident=None, seqs_min_ident=None,
+                                  seqs_mean_ident=None, seqs_std_ident=None)
 
             if "min_support" in wkfilter:
                 # If we are optimizing only lowly supported nodes, and nodes are
@@ -366,7 +325,7 @@ def select_closest_outgroup(target, n2content, splitterconf):
 
     # Gets a list of outside nodes an their distance to current target node
     n2targetdist = distance_matrix_new(target, leaf_only=False,
-                                               topology_only=out_topodist)
+                                               topological=out_topodist)
 
     valid_nodes = sorted([(node, ndist) for node, ndist in n2targetdist.items()
                           if not(n2content[node] & n2content[target])
@@ -390,8 +349,6 @@ def select_closest_outgroup(target, n2content, splitterconf):
                       best_outgroup.children]))
 
     log.log(24, "best outgroup topology:\n%s", best_outgroup)
-    #print target
-    #print target.get_tree_root()
 
     seqs = [n.name for n in n2content[target]]
     outs = [n.name for n in n2content[best_outgroup]]
@@ -430,7 +387,7 @@ def select_sister_outgroup(target, n2content, splitterconf):
 
     # Gets a list of outside nodes an their distance to current target node
     n2targetdist = distance_matrix_new(target, leaf_only=False,
-                                               topology_only=out_topodist)
+                                               topological=out_topodist)
 
     sister_content = n2content[target.get_sisters()[0]]
 
@@ -457,8 +414,6 @@ def select_sister_outgroup(target, n2content, splitterconf):
                       best_outgroup.children]))
 
     log.log(24, "best outgroup topology:\n%s", best_outgroup)
-    #print target
-    #print target.get_tree_root()
 
     seqs = [n.name for n in n2content[target]]
     outs = [n.name for n in n2content[best_outgroup]]
@@ -493,10 +448,10 @@ def select_outgroups(target, n2content, splitterconf):
 
     # Gets a list of outside nodes an their distance to current target node
     n2targetdist = distance_matrix_new(target, leaf_only=False,
-                                               topology_only=out_topodist)
+                                               topological=out_topodist)
 
     #kk, test = distance_matrix(target, leaf_only=False,
-    #                       topology_only=False)
+    #                       topological=False)
 
     #for x in test:
     #    if test[x] != n2targetdist[x]:
@@ -528,7 +483,6 @@ def select_outgroups(target, n2content, splitterconf):
             v = cmp(x.cladeid, y.cladeid)
         return v
 
-    #del n2targetdist[target.get_tree_root()]
     max_dist = max(n2targetdist.values())
     valid_nodes = [n for n in n2targetdist if \
                        not n2content[n] & n2content[target] and
@@ -550,7 +504,7 @@ def select_outgroups(target, n2content, splitterconf):
                       best_outgroup.children]))
 
     if DEBUG():
-        root = target.get_tree_root()
+        root = target.root
         for _seq in outs:
             tar =  root & _seq
             tar.img_style["fgcolor"]="green"
@@ -567,19 +521,19 @@ def select_outgroups(target, n2content, splitterconf):
 
     return set(seqs), set(outs)
 
-def distance_matrix_new(target, leaf_only=False, topology_only=False):
-    t = target.get_tree_root()
+def distance_matrix_new(target, leaf_only=False, topological=False):
+    t = target.root
     real_outgroup = t.children[0]
     t.set_outgroup(target)
 
     n2dist = {target:0}
     for n in target.get_descendants("preorder"):
-        n2dist[n] = n2dist[n.up] + (topology_only or n.dist)
+        n2dist[n] = n2dist[n.up] + (topological or n.dist)
 
     sister = target.get_sisters()[0]
-    n2dist[sister] = (topology_only or sister.dist)+ (topology_only or target.dist)
+    n2dist[sister] = (topological or sister.dist)+ (topological or target.dist)
     for n in sister.get_descendants("preorder"):
-        n2dist[n] = n2dist[n.up] + (topology_only or n.dist)
+        n2dist[n] = n2dist[n.up] + (topological or n.dist)
 
     t.set_outgroup(real_outgroup)
 
@@ -605,7 +559,7 @@ def assembly_tree(runid):
 
         # Restore original gene names
         for leaf in tree.iter_leaves():
-            leaf.add_features(safename=leaf.name)
+            leaf.add_properties(safename=leaf.name)
             #leaf.name = leaf.realname
             leaf.name = leaf.props.get('realname')
 
@@ -618,9 +572,9 @@ def assembly_tree(runid):
             main_tree = tree
 
         iter_name = "Iter_%04d_%dseqs" %(iternumber, size)
-        tree.add_features(iternumber=iternumber)
+        tree.add_properties(iternumber=iternumber)
         iternumber += 1
-    
+
     return main_tree, iternumber
 
 
