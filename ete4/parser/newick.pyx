@@ -32,6 +32,21 @@ def unquote(name):
     else:
         return name
 
+def dirty_read(text):
+    """Return the float value of the given text, even if it contains errors."""
+    # This is a hack to be able to read newicks with errors.
+    try:
+        return float(text)
+    except ValueError:
+        unquoted_text = unquote(text)
+        support = unquoted_text.split(':')[0]
+
+        #name = unquoted_text.split(':')[1]
+        try:
+            support = float(support)
+            return float(support)
+        except ValueError:
+            return 1
 # A "property dict" has all the information for a property ('pname') to know
 # which function to apply to read/write from/to a string.
 #
@@ -42,22 +57,11 @@ STRING_IO = {'read': unquote, 'write': quote}
 NUMBER_IO = {'read': float,   'write': lambda x: '%g' % float(x)}
 DIRTY_NUMBER_IO = {'read': dirty_read, 'write': lambda x: '%g' % float(x)}
 
-def dirty_read(text):
-    """Return the float value of the given text, even if it contains errors."""
-    # This is a hack to be able to read newicks with errors.
-    try:
-        return float(text)
-    except ValueError:
-        unquoted_text = unquote(text)
-        support = unquoted_text.split(':')[0]
-        #name = unquoted_text.split(':')[1]
-        return float(support)
-
 # Common property dicts.
 NAME    = dict(STRING_IO, pname='name')
 DIST    = dict(NUMBER_IO, pname='dist')
 SUPPORT = dict(NUMBER_IO, pname='support')
-
+GTDB_SUPPORT = dict(DIRTY_NUMBER_IO, pname='support')
 # A "parser dict" says, for leaf and internal nodes, what 'p0:p1' means
 # (which properties they are, including how to read and write them).
 
@@ -85,6 +89,7 @@ INT_PARSERS = {  # parsers corresponding to old-style integers
     8:   {'leaf': [NAME_REQ, EMPTY],    'internal': [NAME_REQ,    EMPTY]},
     9:   {'leaf': [NAME_REQ, EMPTY],    'internal': [EMPTY,       EMPTY]},
     100: {'leaf': [EMPTY,    EMPTY],    'internal': [EMPTY,       EMPTY]},
+    101: {'leaf': [NAME,     DIST],     'internal': [GTDB_SUPPORT,       DIST]},
 }
 
 def make_parser(number=1, name='%s', dist='%g', support='%g'):
