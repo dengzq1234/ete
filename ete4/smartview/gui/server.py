@@ -1429,27 +1429,6 @@ def add_tree(data):
     else:
         tree = data.get('tree')
         if not tree:
-<<<<<<< HEAD
-            raise InvalidUsage('Either Newick or Tree object has to be provided.')
-
-    app_tree = app.trees[int(tid)]
-    app_tree.name = name
-    app_tree.tree = tree
-    app_tree.layouts = retrieve_layouts(layouts)
-    if popup_prop_keys: # if data doesn't come from post, this popup_prop_keys will be empty
-        app_tree.popup_prop_keys = popup_prop_keys
-
-    print("Tree added to app.trees")
-
-    start = time()
-    print('Dumping tree...')
-    # Write tree data as a temporary pickle file
-    obj = { 'name': name, 'layouts': layouts, 'tree': tree }
-    with open(f'/tmp/{tid}.pickle', 'wb') as handle:
-        pickle.dump(obj, handle)
-
-    print(f'Dump: {time() - start}')
-=======
             abort(400, 'Either Newick or Tree object has to be provided.')
 
     # TODO: Do we need to do this? (Maybe for the trees uploaded with a POST)
@@ -1483,7 +1462,6 @@ def add_tree(data):
             # because it is done by re-reading from the dumped file.
     thr_write = Thread(daemon=True, target=write_tree_data)  # so we are not delayed
     thr_write.start()                                   # by big trees
->>>>>>> 6424854a7e65473ec77b66d10b213378bbc217c0
 
     return tid
 
