@@ -1,6 +1,5 @@
 import copy
 import itertools
-from collections import deque
 from hashlib import md5
 from functools import cmp_to_key
 import pickle
@@ -130,7 +129,10 @@ cdef class Tree(object):
 
     @name.setter
     def name(self, value):
-        self.props['name'] = str(value)
+        if value is not None:
+            self.props['name'] = str(value)
+        else:
+            self.props.pop('name', None)
 
     @property
     def dist(self):
@@ -138,7 +140,10 @@ cdef class Tree(object):
 
     @dist.setter
     def dist(self, value):
-        self.props['dist'] = float(value)
+        if value is not None:
+            self.props['dist'] = float(value)
+        else:
+            self.props.pop('dist', None)
 
     @property
     def support(self):
@@ -146,7 +151,10 @@ cdef class Tree(object):
 
     @support.setter
     def support(self, value):
-        self.props['support'] = float(value)
+        if value is not None:
+            self.props['support'] = float(value)
+        else:
+            self.props.pop('support', None)
 
     @property
     def children(self):
@@ -165,13 +173,13 @@ cdef class Tree(object):
     @property
     def is_root(self):
         """Return True if the current node has no parent."""
-        return not self.up
+        return self.up is None
 
     @property
     def root(self):
         """Return the absolute root node of the current tree structure."""
         node = self
-        while node.up:
+        while node.up is not None:
             node = node.up
         return node
 
@@ -180,7 +188,7 @@ cdef class Tree(object):
         """Return node_id (list of relative hops from root to node)."""
         reversed_id = []
         node = self
-        while node.up:
+        while node.up is not None:
             reversed_id.append(node.up.children.index(node))
             node = node.up
         return reversed_id[::-1]  # will look like  [0, 0, 1, 0]
@@ -190,7 +198,7 @@ cdef class Tree(object):
         """Return the number of nodes between this node and the root."""
         n = 0
         node = self.up
-        while node:
+        while node is not None:
             n += 1
             node = node.up
         return n
@@ -264,11 +272,12 @@ cdef class Tree(object):
         self._collapsed_faces = value
 
     def __bool__(self):
-        # If this is not defined, bool(t) will call len(t).
+        # If this is not defined, bool(t) will call len(t) (terribly slow!).
         return True
 
     def __repr__(self):
-        return 'Tree %r (%s)' % (self.name, hex(self.__hash__()))
+        name_str = (' ' + repr(self.name)) if self.name else ''
+        return '<Tree%s at %s>' % (name_str, hex(self.__hash__()))
 
     def __getitem__(self, node_id):
         """Return the node that matches the given node_id."""
@@ -303,9 +312,18 @@ cdef class Tree(object):
         return self.to_str(show_internal=False, compact=True, props=['name'])
 
     def to_str(self, show_internal=True, compact=False, props=None,
-               px=None, py=None, px0=0, waterfall=False):
+               px=None, py=None, px0=0, cascade=False):
+        """Return a string containing an ascii drawing of the tree.
+
+        :param show_internal: If True, show the internal nodes too.
+        :param compact: If True, use exactly one line per tip.
+        :param props: List of node properties to show. If None, show all.
+        :param px, py, px0: Paddings (x, y, x for leaves). Overrides `compact`.
+        :param cascade: Use a cascade representation. Overrides
+            `show_internal`, `compact`, `px`, `py`, `px0`.
+        """
         return text_viz.to_str(self, show_internal, compact, props,
-                               px, py, px0, waterfall)
+                               px, py, px0, cascade)
 
     def __contains__(self, item):
         """Return True if the tree contains the given item.
@@ -386,10 +404,11 @@ cdef class Tree(object):
 
         return child
 
-    def add_children(self, children):
-        for child in children:
-            self.add_child(child)
-        return children
+    def add_children(self, nodes):
+        """Set the given nodes as children of this node."""
+        for node in nodes:
+            self.add_child(node)
+        return nodes
 
     def pop_child(self, child_idx=-1):
         try:
@@ -409,13 +428,16 @@ cdef class Tree(object):
         but are no longer connected.
         """
         try:
+            if type(child) == str:  # translate into a node
+                child = next(n for n in self.children if n.name == child)
+
             self.children.remove(child)  # parent removes child
 
             if child.up == self:  # (it may point to another already!)
                 child.up = None  # child removes parent
 
             return child
-        except ValueError as e:
+        except (StopIteration, ValueError) as e:
             raise TreeError(f'Cannot remove child: not found ({e})')
 
     def remove_children(self):
@@ -434,16 +456,12 @@ cdef class Tree(object):
         return self.up.add_child(child=sister, name=name, dist=dist)
 
     def remove_sister(self, sister=None):
-        """Remove a sister node.
+        """Remove a sister node and return it.
 
-        It has the same effect as self.up.remove_child(sister).
-
-        If a sister node is not supplied, the first sister will be deleted
-        and returned.
+        It has the same effect as self.up.remove_child(sister). If a sister
+        node is not supplied, the first sister will be deleted.
 
         :param sister: A node instance to be removed as a sister.
-
-        :return: The node removed.
         """
         sisters = self.get_sisters()
         if not sisters:
@@ -683,51 +701,14 @@ cdef class Tree(object):
             True/False. Use this to traverse a tree by dynamically
             collapsing internal nodes.
         """
-        traversals = {'levelorder': self._iter_levelorder,
-                      'preorder': self._iter_preorder,
-                      'postorder': self._iter_postorder}
-        try:
-            yield from traversals[strategy](is_leaf_fn)
-        except KeyError:
+        if strategy == 'levelorder':
+            yield from ops.traverse_bfs(self, is_leaf_fn)
+        elif strategy == 'preorder':
+            yield from ops.traverse(self, order=-1, is_leaf_fn=is_leaf_fn)
+        elif strategy == 'postorder':
+            yield from ops.traverse(self, order=+1, is_leaf_fn=is_leaf_fn)
+        else:
             raise TreeError(f'Unknown strategy: {strategy}')
-
-    def _iter_levelorder(self, is_leaf_fn=None):
-        """Yield all nodes in levelorder."""
-        tovisit = deque([self])
-        while len(tovisit) > 0:
-            node = tovisit.popleft()
-            yield node
-            if not is_leaf_fn or not is_leaf_fn(node):
-                tovisit.extend(node.children)
-
-    def _iter_preorder(self, is_leaf_fn=None):
-        """Yield all nodes in preorder."""
-        to_visit = deque()
-        node = self
-        while node is not None:
-            yield node
-            if not is_leaf_fn or not is_leaf_fn(node):
-                to_visit.extendleft(reversed(node.children))
-            try:
-                node = to_visit.popleft()
-            except:
-                node = None
-
-    def _iter_postorder(self, is_leaf_fn=None):
-        """Yield all nodes in postorder."""
-        is_leaf = is_leaf_fn or (lambda n: n.is_leaf)
-        to_visit = [self]
-
-        while to_visit:
-            node = to_visit.pop(-1)
-            if type(node) != list:  # preorder actions
-                if not is_leaf(node):  # add children
-                    to_visit.extend(reversed(node.children + [[1, node]]))
-                else:
-                    yield node
-            else:  # postorder actions
-                node = node[1]
-                yield node
 
     def iter_prepostorder(self, is_leaf_fn=None):
         """Yield all nodes in a tree in both pre and post order.
@@ -735,42 +716,33 @@ cdef class Tree(object):
         Each iteration returns a postorder flag (True if node is being visited
         in postorder) and a node instance.
         """
-        is_leaf_fn = is_leaf_fn or (lambda n: n.is_leaf)
-        to_visit = [self]
-
-        while to_visit:
-            node = to_visit.pop(-1)
-            if type(node) != list:
-                yield (False, node)
-                if not is_leaf_fn(node):  # add children
-                    to_visit.extend(reversed(node.children + [[1, node]]))
-            else:  # postorder actions
-                node = node[1]
-                yield (True, node)
+        path = []  # path of nodes from the root to the current one
+        for node in ops.traverse(self, order=0, is_leaf_fn=is_leaf_fn):
+            seen = path and node is path[-1]  # has the current node been seen?
+            yield seen, node
+            if seen:
+                path.pop()
+            elif not node.is_leaf:
+                path.append(node)
 
     def ancestors(self, root=None, include_root=True):
         """Yield all ancestor nodes of this node (up to the root if given)."""
+        # root === n1 === n2 === .. === nN === node  ->  [nN, .., n2, n1, root]
         node = self
 
-        if node == root or (not include_root and node.up == root):
+        if node is root:
             return  # node is not an ancestor of itself
 
-        while node.up:
+        while node.up is not root:
             node = node.up
-
             yield node
 
-            if ((include_root and node == root) or
-                (not include_root and node.up == root)):
-                break  # we already yielded all the nodes we want
-
-        if root is not None and ((include_root and node != root) or
-                                 (not include_root and node.up != root)):
-            raise TreeError('node is no descendant from given root: %r' % root)
+        if root is not None and include_root:
+            yield root
 
     def lineage(self, root=None, include_root=True):
         """Yield all nodes in the lineage of this node (up to root if given)."""
-        if not include_root and self == root:
+        if not include_root and self is root:
             return  # the node itself would not be in its lineage
 
         # Same as ancestors() but also yielding itself first.
@@ -1004,7 +976,7 @@ cdef class Tree(object):
         _, diameter = current.get_farthest_node(topological=topological)
 
         dist = 0
-        while current.up:
+        while current.up is not None:
             dist += 1 if topological else current.dist
 
             if dist > diameter / 2:
@@ -1014,42 +986,57 @@ cdef class Tree(object):
 
         return current  # the midpoint was the root (we went back to it)
 
-    def populate(self, size, names_library=None, random_branches=False,
-                 dist_range=(0, 1), support_range=(0, 1)):
-        """Populate current node with branches generating a random topology."""
-        ops.populate(self, size, names_library, random_branches,
-                     dist_range, support_range)
+    def populate(self, size, names=None, model='yule',
+                 dist_fn=None, support_fn=None):
+        """Populate current node with a dichotomic random topology.
 
-    def set_outgroup(self, node, bprops=None):
-        """Reroot the tree at the given outgroup node."""
-        node = self[node] if type(node) == str else node  # translates if needed
-        ops.set_outgroup(node, bprops)
+        :param size: Number of leaves to add. The necessary
+            intermediate nodes will be created too.
+        :param names: Collection (list or set) of names to name the leaves.
+            If None, leaves will be named using short letter sequences.
+        :param model: Model used to generate the topology. It can be:
 
-    def unroot(self, mode='legacy'):
-        """Unroot current node.
+            - "yule" or "yule-harding": Every step a randomly selected leaf
+              grows two new children.
+            - "uniform" or "pda": Every step a randomly selected node (leaf
+              or interior) grows a new sister leaf.
 
-        This function is expected to be used on the absolute tree root
-        node, but it can be also be applied to any other internal
-        node. It will convert a split into a multifurcation.
+        :param dist_fn: Function to produce values to set as distance
+            in newly created branches, or None for no distances.
+        :param support_fn: Function to produce values to set as support
+            in newly created internal branches, or None for no supports.
 
-        :param mode: The value can be "legacy" or "keep". If value is
-            "keep", it keeps the distance between the leaves by adding
-            the distance associated to the deleted edge to the
-            remaining edge. Otherwise that distance is just dropped.
+        Example to create a tree with 100 leaves, uniformly random
+        distances between 0 and 1, and all valid supports set to 1::
+
+          t = Tree()
+          random.seed(42)  # set seed if we want a reproducible result
+          t.populate(100, dist_fn=random.random, support_fn=lambda: 1)
         """
-        if not (mode == 'legacy' or mode == 'keep'):
-            raise ValueError("The value of the mode parameter must be 'legacy' or 'keep'")
-        if len(self.children)==2:
-            if not self.children[0].is_leaf:
-                if mode == "keep":
-                    self.children[1].dist+=self.children[0].dist
-                self.children[0].delete()
-            elif not self.children[1].is_leaf:
-                if mode == "keep":
-                    self.children[0].dist+=self.children[1].dist
-                self.children[1].delete()
-            else:
-                raise TreeError("Cannot unroot a tree with only two leaves")
+        ops.populate(self, size, names, model, dist_fn, support_fn)
+
+    def set_outgroup(self, node, bprops=None, dist=None):
+        """Change tree so the given node is set as outgroup.
+
+        The original root node will be used as the new root node, so any
+        reference to it in the code will still be valid.
+
+        :param node: Node to set as outgroup (future first child of the root).
+        :param bprops: List of branch properties (other than "dist" and "support").
+        :param dist: Distance from the node, where we put the new root of the tree.
+        """
+        node = self[node] if type(node) == str else node  # translates if needed
+        ops.set_outgroup(node, bprops, dist)
+
+    def unroot(self, bprops=None):
+        """Unroot the tree, that is, make the root not have 2 children.
+
+        The convention in phylogenetic trees is that if the root has 2
+        children, it is a "rooted" tree (the root is a real ancestor).
+        Otherwise (typically a root with 3 children), the root is just
+        an arbitrary place to hang the tree.
+        """
+        ops.unroot(self, bprops)
 
     def show(self, layout=None, tree_style=None, name="ETE"):
         """Start an interactive session to visualize the current node."""
@@ -1091,7 +1078,7 @@ cdef class Tree(object):
     def explore(self, name=None, layouts=None, show_leaf_name=True,
                 show_branch_length=True, show_branch_support=True,
                 include_props=('name', 'dist'), exclude_props=None,
-                host='localhost', port=5000, quiet=True,
+                host='localhost', port=None, quiet=True,
                 compress=False, keep_server=False, open_browser=True):
         """Launch an interactive smartview session to visualize the tree.
 
@@ -1102,6 +1089,8 @@ cdef class Tree(object):
         :param list include_props: Properties to show in the nodes popup.
             If None, show all.
         :param list exclude_props: Properties to exclude from the nodes popup.
+        :param port: Server listening port. If None, use next
+            available port >= 5000.
         """
         from ..smartview.gui.server import run_smartview
 
@@ -1155,7 +1144,8 @@ cdef class Tree(object):
         """
         method = method.lower()
         if method=="newick":
-            new_node = self.__class__(self.write(format_root_node=True))
+            new_node = self.__class__(self.write(format_root_node=True,
+                                                 parser=1), parser=1)
         elif method=="newick-extended":
             new_node = self.__class__(self.write(props=None))
         elif method == "deepcopy":
@@ -1178,16 +1168,9 @@ cdef class Tree(object):
         ops.ladderize(self, topological, reverse)
 
     def sort_descendants(self, prop='name'):
-        """Sort branches by node names.
-
-        After the tree is sorted, if duplicated names are present,
-        extra criteria should be added to sort nodes.
-        """
-        node2content = self.get_cached_content(prop, container_type=list)
-
-        for n in self.traverse():
-            if not n.is_leaf:
-                n.children.sort(key=lambda x: str(sorted(node2content[x])))
+        """Sort branches by leaf node values (names or any other given prop)."""
+        leaf_values = self.get_cached_content(prop, container_type=list)
+        ops.sort(self, key=lambda node: tuple(sorted(leaf_values[node])))
 
     def get_cached_content(self, prop=None, container_type=set,
                            leaves_only=True):
@@ -1206,7 +1189,6 @@ cdef class Tree(object):
         :param leaves_only: If False, for each node it stores all its
             descendant nodes, not only its leaves.
         """
-
         def get_content():  # return the node itself, or its requested prop
             return self if prop is None else self.get_prop(prop)
 
@@ -1759,42 +1741,18 @@ cdef class Tree(object):
             n2subtrees[n] = subtrees
         return ["%s;"%str(nw) for nw in n2subtrees[self]] # tuples are in newick format ^_^
 
-    def resolve_polytomy(self, recursive=True, defaults=None):
-        """Resolve all polytomies under the current node, randomly.
+    def resolve_polytomy(self, descendants=True):
+        """Convert node to a series of dicotomies if it is a polytomy.
 
         A polytomy is a node that has more than 2 children. This
-        function resolves them by creating an arbitrary dicotomic
-        structure among the affected nodes. It randomly modifies the
-        current tree topology and should only be used for
-        compatibility reasons (like to later use programs that reject
-        multifurcated nodes).
+        function changes them to a ladderized series of dicotomic
+        branches. The tree topology modification is arbitrary (no
+        important results should depend on it!).
 
-        :param recursive: If True, resolve all polytomies under this
-             node too. Otherwise, only the current node will be
-             checked and fixed.
-        :param defaults: Dictionary of properties to use for new nodes.
+        :param descendants: If True, resolve all polytomies under this
+             node too. Otherwise, do it only for the current node.
         """
-        def resolve(node):
-            if len(node.children) <= 2:
-                return  # nothing to resolve here!
-
-            children = node.remove_children()
-            next_node = root = node
-            for i in range(len(children) - 2):
-                next_node = next_node.add_child()
-                next_node.props.update(defaults or {})
-
-            next_node = root
-            for ch in children:
-                next_node.add_child(ch)
-                if ch != children[-2]:
-                    next_node = next_node.children[0]
-
-        resolve(self)
-
-        if recursive:
-            for n in self.descendants():
-                resolve(n)
+        ops.resolve_polytomy(self, descendants)
 
     def cophenetic_matrix(self):
         """Return a cophenetic distance matrix of the tree.
@@ -1848,11 +1806,11 @@ cdef class Tree(object):
         For this tree, we will return the two dimensional array::
 
                     A                B                C                D                E
-          A         0         d(A-y) + d(B-y)  d(A-z) + d(C-z)  d(A-z) + d(D-z)  d(A-z) + d(E-z)
-          B  d(B-y) + d(A-y)         0         d(B-z) + d(C-z)  d(B-z) + d(D-z)  d(B-z) + d(E-z)
-          C  d(C-z) + d(A-z)  d(C-z) + d(B-z)         0         d(C-x) + d(D-x)  d(C-x) + d(E-x)
-          D  d(D-z) + d(A-z)  d(D-z) + d(B-z)  d(D-x) + d(C-x)         0         d(D-w) + d(E-w)
-          E  d(E-z) + d(A-z)  d(E-z) + d(B-z)  d(E-x) + d(C-x)  d(E-w) + d(D-w)         0
+          A         0         d(A,y) + d(B,y)  d(A,z) + d(C,z)  d(A,z) + d(D,z)  d(A,z) + d(E,z)
+          B  d(B,y) + d(A,y)         0         d(B,z) + d(C,z)  d(B,z) + d(D,z)  d(B,z) + d(E,z)
+          C  d(C,z) + d(A,z)  d(C,z) + d(B,z)         0         d(C,x) + d(D,x)  d(C,x) + d(E,x)
+          D  d(D,z) + d(A,z)  d(D,z) + d(B,z)  d(D,x) + d(C,x)         0         d(D,w) + d(E,w)
+          E  d(E,z) + d(A,z)  d(E,z) + d(B,z)  d(E,x) + d(C,x)  d(E,w) + d(D,w)         0
 
         We will also return the one dimensional array with the leaves
         in the order in which they appear in the matrix (i.e. the
@@ -1895,7 +1853,9 @@ cdef class Tree(object):
                     output[i].append(leaf_distances[n][m])
         return output, allleaves
 
-    def add_face(self, face, column=0, position='branch-right',
+    # TODO: All the following "face and style functions" should go away.
+
+    def add_face(self, face, column=0, position='branch_right',
                  collapsed_only=False):
         if TREEVIEW and isinstance(face, Face):
             self.add_face_treeview(face, column, position)
@@ -1929,7 +1889,7 @@ cdef class Tree(object):
         else:
             raise ValueError("not a Face instance")
 
-    def add_face_smartview(self, face, column, position='branch-right',
+    def add_face_smartview(self, face, column, position='branch_right',
                            collapsed_only=False):
         """Add a fixed face to the node.
 
@@ -1939,7 +1899,7 @@ cdef class Tree(object):
         :param face: Face to add.
         :param column: Column number where the face will go. Starts at 0.
         :param position: Position to place the face in the node. Posible
-            values are: "branch-right", "branch-top", "branch-bottom", "aligned".
+            values are: "branch_right", "branch_top", "branch_bottom", "aligned".
         """
         # TODO: Is it true that "This type of faces will be always attached
         # to nodes, independently of the layout function"? And why?
@@ -1958,7 +1918,7 @@ cdef class Tree(object):
 
         Set 'node_style' as the fixed style for the current node.
         """
-        if isinstance(node_style, NodeStyle):
+        if TREEVIEW and isinstance(node_style, NodeStyle):
             self._img_style = node_style
         elif isinstance(node_style, smNodeStyle):
             self._sm_style = node_style
@@ -2049,7 +2009,3 @@ cdef class Tree(object):
                     ete_node.add_child(ete_ch)
                     all_nodes[ch] = ete_ch
             return ete_ch.root
-
-    def phonehome(self):
-        from .. import _ph
-        _ph.call()

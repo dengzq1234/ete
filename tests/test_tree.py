@@ -65,6 +65,28 @@ class Test_Core_Tree(unittest.TestCase):
         t.del_prop('testf4')
         self.assertTrue('testf4' not in t.props)
 
+    def test_basic_properties(self):
+        t = Tree('((a:1,b:2)0.8:3,c:4);')
+
+        self.assertTrue(type(t['a'].dist) == float)
+        self.assertTrue(type(t[0].support) == float)
+
+        t[0].support = None
+        self.assertTrue('support' not in t[0].props)
+        self.assertTrue(t[0].support is None)
+
+        t[0].dist = None
+        self.assertTrue('dist' not in t[0].props)
+        self.assertTrue(t[0].dist is None)
+
+        a = t['a']
+        a.name = None
+        self.assertTrue('name' not in a.props)
+        self.assertTrue(a.name is None)
+
+        a.name = 5
+        self.assertTrue(a.name == '5')
+
     def test_tree_read_and_write(self):
         """Test newick support."""
         # Read and write newick tree from/to file.
@@ -118,13 +140,17 @@ class Test_Core_Tree(unittest.TestCase):
         self.assertEqual(expected_nw, t.write(props=None))
 
     def test_repr(self):
-        # Node instance repr
-        self.assertTrue(Tree().__repr__().startswith('Tree'))
-        self.assertTrue(('%r' % Tree()).startswith('Tree'))
+        """Test that the Tree representation looks like we expect."""
+        t = Tree()
+        r1, r2, r3 = t.__repr__(), repr(t), '%r' % t
+        self.assertTrue(r1 == r2 == r3)
+        self.assertTrue(r1.startswith('<Tree '))
+        self.assertTrue(r1.endswith('>'))
+        self.assertTrue(' at 0x' in r1)
 
     def test_to_str(self):
         """Test that the ascii representation (to use when printing) works."""
-        t = Tree('((a,b)x,(c,d)y);')
+        t = Tree('((a,b)x,(c,d)y);', parser=1)
 
         self.assertEqual(t.to_str(props=['name']), strip("""
                ╭╴a
@@ -141,7 +167,7 @@ class Test_Core_Tree(unittest.TestCase):
          ╰─┬╴c
            ╰╴d
         """))
-        self.assertEqual(t.to_str(props=['name'], waterfall=True), strip("""
+        self.assertEqual(t.to_str(props=['name'], cascade=True), strip("""
         ⊗
         ├─┐x
         │ ├─╴a
@@ -160,7 +186,7 @@ class Test_Core_Tree(unittest.TestCase):
                    ╰╴⊗,⊗
         """))
 
-        t2 = Tree('((a:1,b:2)x:3,(c:4,d:5)y:6);')
+        t2 = Tree('((a:1,b:2)x:3,(c:4,d:5)y:6);', parser=1)
         self.assertEqual(t2.to_str(props=['dist']), strip("""
                  ╭╴1.0
            ╭╴3.0╶┤
@@ -201,9 +227,10 @@ class Test_Core_Tree(unittest.TestCase):
         # Let's stress a bit
         for i in range(10):
             t = Tree()
-            t.populate(4, random_branches=True)
+            t.populate(4, dist_fn=random.random, support_fn=random.random)
             for n in t.traverse():
                 n.name = n.name or 'NoName'
+                n.support = n.support or 1
             for f in NW_FORMAT:
                 self.assertEqual(t.write(parser=f), Tree(t.write(parser=f),parser=f).write(parser=f))
 
@@ -220,7 +247,7 @@ class Test_Core_Tree(unittest.TestCase):
         # Format 100 = ((,(,)),);
 
         t = Tree()
-        t.populate(50, random_branches=True)
+        t.populate(50, dist_fn=random.random, support_fn=random.random)
         for n in t.traverse():
             n.name = n.name or 'NoName'
         t.sort_descendants()
@@ -328,18 +355,19 @@ class Test_Core_Tree(unittest.TestCase):
         nw2_normalized = '''(('A:\\"0.1\\"':1,'%s':2)'C:''0.00''\':3,'D''sd''x':4);''' % complex_name
         for nw, nw_normalized in [(nw1, nw1_normalized), (nw2, nw2_normalized)]:
             self.assertRaises(NewickError, Tree, nw, parser=0)
-            t = Tree(nw)
+            t = Tree(nw, parser=1)
             self.assertTrue(any(n for n in t if n.name == '%s' % complex_name))
             # test writing and reloading tree
-            nw_back = t.write()
-            t2 = Tree(nw)
-            nw_back2 = t2.write()
+            nw_back = t.write(parser=1)
+            t2 = Tree(nw, parser=1)
+            nw_back2 = t2.write(parser=1)
             self.assertEqual(nw_normalized, nw_back)
             self.assertEqual(nw_normalized, nw_back2)
 
     def test_custom_formatting_formats(self):
         """Test change dist, name and support formatters."""
-        t = Tree('((A:1.111111, B:2.222222)C:3.33333[&&NHX:support=1], D:4.44444);')
+        t = Tree('((A:1.1111,B:2.2222)C:3.3333[&&NHX:support=1],D:4.4444);',
+                 parser=1)
         t.sort_descendants()
 
         check = [[0, '((TEST-A:1.1,TEST-B:2.2)SUP-1.0:3.3,TEST-D:4.4);'],
@@ -459,22 +487,22 @@ class Test_Core_Tree(unittest.TestCase):
 
         # test prune keeping internal nodes
 
-        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;')
+        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;', parser=1)
         t1.prune(['A', 'B', 'F', 'H'])
         self.assertEqual(set([n.name for n in t1.traverse()]),
                          set(['A', 'B', 'F', 'H', 'root']))
 
-        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;')
+        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;', parser=1)
         t1.prune(['A', 'B'])
         self.assertEqual(set([n.name for n in t1.traverse()]),
                          set(['A', 'B', 'root']))
 
-        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;')
+        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;', parser=1)
         t1.prune(['A', 'B', 'C'])
         self.assertEqual(set([n.name for n in t1.traverse()]),
                          set(['A', 'B', 'C', 'root']))
 
-        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;')
+        t1 = Tree('(((((A,B)C)D,E)F,G)H,(I,J)K)root;', parser=1)
         t1.prune(['A', 'B', 'I'])
         self.assertEqual(set([n.name for n in t1.traverse()]),
                          set(['A', 'B', 'C', 'I', 'root']))
@@ -541,7 +569,7 @@ class Test_Core_Tree(unittest.TestCase):
         # test prune preserving distances
         for i in range(3):  # NOTE: each iteration is quite slow
             t = Tree()
-            t.populate(40, random_branches=True)
+            t.populate(40, dist_fn=random.random, support_fn=random.random)
             orig_nw = t.write()
             distances = {}
             for a in t.leaves():
@@ -556,7 +584,7 @@ class Test_Core_Tree(unittest.TestCase):
 
         # Total number of nodes is correct (no single child nodes)
         for x in range(10):
-            t_fuzzy = Tree("(((A,B)1, C)2,(D,E)3)root;")
+            t_fuzzy = Tree("(((A,B)1, C)2,(D,E)3)root;", parser=1)
             t_fuzzy.sort_descendants()
             orig_nw = t_fuzzy.write()
             ref_nodes = list(t_fuzzy.descendants())
@@ -580,7 +608,7 @@ class Test_Core_Tree(unittest.TestCase):
 
         # Test preserve branch dist when pruning
         t = Tree()
-        t.populate(100, random_branches=True)
+        t.populate(100, dist_fn=random.random, support_fn=random.random)
         sample_size = 10  # NOTE: big values make this test very slow
         sample = random.sample(list(t.leaves()), sample_size)
         matrix1 = ["%f" % t.get_distance(a, b) for (a,b) in itertools.product(sample, sample)]
@@ -590,23 +618,21 @@ class Test_Core_Tree(unittest.TestCase):
         self.assertEqual(matrix1, matrix2)
         self.assertEqual(len(list(t.descendants())), (sample_size*2)-2 )
 
-    def test_resolve_polytomies(self):
-        # resolve polytomy
-        t = Tree("((a,a,a,a), (b,b,b,(c,c,c)));")
+    def test_resolve_polytomy(self):
+        t = Tree('((a,a,a,a),(b,b,b,(c,c,c)));')
         t.resolve_polytomy()
-        t.ladderize()
-        self.assertEqual(t.write(parser=9), "((a,(a,(a,a))),(b,(b,(b,(c,(c,c))))));")
+        self.assertEqual(t.write(parser=9), '((((a,a),a),a),(((b,b),b),((c,c),c)));')
 
-        t = Tree("((((a,a,a,a))), (b,b,b,(c,c,c)));")
-        t.standardize()
-        t.ladderize()
-        self.assertEqual(t.write(parser=9), "((a,(a,(a,a))),(b,(b,(b,(c,(c,c))))));")
+        t = Tree('((((a,a,a,a))),(b,b,b,(c,c,c)));')
+        t.standardize()  # calls resolve_polytomy() internally too
+        self.assertEqual(t.write(parser=9), '((((b,b),b),((c,c),c)),(((a,a),a),a));')
 
     def test_common_ancestors(self):
         # getting nodes, get_childs, get_sisters, root,
         # get_common_ancestor, get_nodes_by_name
         # get_descendants_by_name, is_leaf, is_root
-        t = Tree("(((A,B)N1,C)N2[&&NHX:tag=common],D)[&&NHX:tag=root:name=root];")
+        t = Tree("(((A,B)N1,C)N2[&&NHX:tag=common],D)[&&NHX:tag=root:name=root];",
+                 parser=1)
         self.assertEqual(t.get_sisters(), [])
 
         A, B, C = t['A'], t['B'], t['C']
@@ -651,7 +677,7 @@ class Test_Core_Tree(unittest.TestCase):
     def test_getters_iters(self):
 
         # Iter ancestors
-        t = Tree("(((((a,b)A,c)B,d)C,e)D,f)root;")
+        t = Tree("(((((a,b)A,c)B,d)C,e)D,f)root;", parser=1)
         ancestor_names = [n.name for n in (t["a"]).ancestors()]
         self.assertEqual(ancestor_names, ["A", "B", "C", "D", "root"])
         ancestor_names = [n.name for n in (t["B"]).ancestors()]
@@ -690,25 +716,21 @@ class Test_Core_Tree(unittest.TestCase):
 
         # Check order or visiting nodes
 
-        t = Tree("((3,4)2,(6,7)5)1;")
-        #t = Tree("(((A, B)C, (D, E)F)G, (H, (I, J)K)L)M;")
-        #postorder = [c for c in "ABCDEFGHIJKLM"]
-        #preorder =  [c for c in reversed(postorder)]
-        #levelorder = [c for c in "MGLCFHKABDEIJ"]
+        t = Tree("((3,4)2,(6,7)5)1;", parser=1)
         postorder = "3426751"
         preorder = "1234567"
         levelorder = "1253467"
 
         self.assertEqual(preorder,
-                          ''.join([n.name for n in t.traverse("preorder")]))
+                         ''.join(n.name for n in t.traverse("preorder")))
 
         self.assertEqual(postorder,
-                         ''.join([n.name for n in t.traverse("postorder")]))
+                         ''.join(n.name for n in t.traverse("postorder")))
 
         self.assertEqual(levelorder,
-                         ''.join([n.name for n in t.traverse("levelorder")]))
+                         ''.join(n.name for n in t.traverse("levelorder")))
 
-        # Swap childs
+        # Swap children.
         n = t.get_children()
         t.reverse_children()
         n.reverse()
@@ -717,7 +739,8 @@ class Test_Core_Tree(unittest.TestCase):
     def test_distances(self):
         # Distances: get_distance, get_farthest_node,
         # get_farthest_descendant, get_midpoint_outgroup
-        t = Tree("(((A:0.1, B:0.01):0.001, C:0.0001):1.0[&&NHX:name=I], (D:0.00001):0.000001[&&NHX:name=J]):2.0[&&NHX:name=root];")
+        t = Tree('(((A:0.1, B:0.01):0.001, C:0.0001):1.0[&&NHX:name=I], '
+                 '(D:0.00001):0.000001[&&NHX:name=J]):2.0[&&NHX:name=root];')
         A = t['A']
         B = t['B']
         C = t['C']
@@ -763,7 +786,7 @@ class Test_Core_Tree(unittest.TestCase):
 
     def test_rooting_topology(self):
         """Test topology changes after rooting"""
-        t = Tree('((d,e)b,(f,g)c);')
+        t = Tree('((d,e)b,(f,g)c);', parser=1)
         self.assertLooks(t, """
                    ╭╴b╶┬╴d
                 ╴⊗╶┤   ╰╴e
@@ -860,14 +883,14 @@ class Test_Core_Tree(unittest.TestCase):
 
         # Test that the distance of the two root branches after
         # rooting are balanced.
-        t = Tree('((A:10,B:1),(C:1,D:1)E:1)root;');
+        t = Tree('((A:10,B:1),(C:1,D:1)E:1)root;', parser=1);
         t.set_outgroup(t.get_midpoint_outgroup())
         self.assertEqual(t.children[0].dist, 5.0)
         self.assertEqual(t.children[1].dist, 5.0)
 
-        # Test that set_outgroup can root an unrooted tree with three.
-        # root children
-        t = Tree('(A:10,B:1,(C:1,D:1)E:1)root;');
+        # Test that set_outgroup can root an "unrooted" tree (that is, a tree
+        # whose root has more than 2 children).
+        t = Tree('(A:10,B:1,(C:1,D:1)E:1)root;', parser=1);
         self.assertEqual(t.children[0], t['A'])
         t.set_outgroup(t['A'])
 
@@ -877,17 +900,32 @@ class Test_Core_Tree(unittest.TestCase):
         self.assertEqual(t.children[1].dist, 5.0)
 
     def test_unroot(self):
-        t = Tree("(('a':0.5, 'b':0.5):0.5, ('c':0.2, 'd':0.2):0.8):1;" )
-        t2 = Tree("(('a':0.5, 'b':0.5):0.5, ('c':0.2, 'd':0.2):0.8):1;" )
-        t.unroot(mode="keep")
-        with self.assertRaises(ValueError):
-            t.unroot(mode="new")
-        t2.unroot(mode="legacy")
-        self.assertEqual("((c:0.2,d:0.2):1.3,a:0.5,b:0.5);", t.write())
-        self.assertEqual("((c:0.2,d:0.2):0.8,a:0.5,b:0.5);", t2.write())
+        # Simple case. We start with a dicotomy from the root.
+        t = Tree('((a:0.5,b:0.5):0.5,(c:0.2,d:0.2):0.8);')
+        t.unroot()
+        self.assertEqual('(a:0.5,b:0.5,(c:0.2,d:0.2):1.3);', t.write())
+
+        # If we unroot an unrooted tree, it should stay the same:
+        t.unroot()
+        self.assertEqual('(a:0.5,b:0.5,(c:0.2,d:0.2):1.3);', t.write())
+
+        # Test unrooting when we have more branch properties.
+        t = Tree('((a:0.5[&&NHX:color=green],b:0.5[&&NHX:color=red]):0.5'
+                 '[&&NHX:color=green],(c:0.2[&&NHX:color=green],d:0.2'
+                 '[&&NHX:color=blue]):0.8[&&NHX:color=green]);')
+        t.unroot(bprops=['color'])
+        self.assertEqual(t.write(props=None),
+            '(a:0.5[&&NHX:color=green],b:0.5[&&NHX:color=red],(c:0.2'
+            '[&&NHX:color=green],d:0.2[&&NHX:color=blue]):1.3[&&NHX:color=green]);')
+
+        # If the branch properties are not consistent, we have an exception.
+        t = Tree('((a:0.5[&&NHX:color=green],b:0.5[&&NHX:color=red]):0.5'
+                 '[&&NHX:color=green],(c:0.2[&&NHX:color=green],d:0.2'
+                 '[&&NHX:color=blue]):0.8[&&NHX:color=red]);')
+        self.assertRaises(AssertionError, t.unroot, bprops=['color'])
 
     def test_tree_navigation(self):
-        t = Tree('(((A,B)H,C)I,(D,F)J)root;')
+        t = Tree('(((A,B)H,C)I,(D,F)J)root;', parser=1)
         postorder = [n.name for n in t.traverse("postorder")]
         preorder = [n.name for n in t.traverse("preorder")]
         levelorder = [n.name for n in t.traverse("levelorder")]
@@ -933,7 +971,7 @@ class Test_Core_Tree(unittest.TestCase):
 
         # Generate a random tree. Test branch support and distances after rooting.
         t = Tree()
-        t.populate(50, random_branches=True, support_range=(0, 100))
+        t.populate(50, dist_fn=random.random, support_fn=lambda: random.uniform(0, 100))
         t.unroot()
 
         # Add a branch property.
@@ -1006,7 +1044,7 @@ class Test_Core_Tree(unittest.TestCase):
 
     def test_treeid(self):
         t = Tree()
-        t.populate(50, random_branches=True)
+        t.populate(50, dist_fn=random.random, support_fn=random.random)
         orig_id = t.get_topology_id()
         nodes = list(t.descendants())
         for i in range(20):
@@ -1016,7 +1054,7 @@ class Test_Core_Tree(unittest.TestCase):
 
     def test_node_id(self):
         """Test the node_id corresponding to a node inside a tree."""
-        t = Tree('((a,b)x,(c,d)y);')
+        t = Tree('((a,b)x,(c,d)y);', parser=1)
         #     ╭╴x [0]╶┬╴a [0,0]
         # ╴[]╶┤       ╰╴b [0,1]
         #     ╰╴y [1]╶┬╴c [1,0]
@@ -1034,14 +1072,14 @@ class Test_Core_Tree(unittest.TestCase):
         # Convert tree to a ultrametric, in which the distance from
         # leafs to root is always the same.
         t = Tree()
-        t.populate(80, random_branches=True)
+        t.populate(80, dist_fn=random.random, support_fn=random.random)
         max_dist = max(t.get_distance(t, n) for n in t)
 
         t.to_ultrametric()
         self.assertTrue(all(abs(t.get_distance(t, n) - max_dist) < EPSILON for n in t))
 
         t2 = Tree()
-        t2.populate(80, random_branches=True)
+        t2.populate(80, dist_fn=random.random, support_fn=random.random)
         max_dist = max(t2.get_distance(t2, n) for n in t2)
 
         t2.to_ultrametric(topological=True)
@@ -1458,7 +1496,8 @@ class Test_Core_Tree(unittest.TestCase):
         self.assertEqual(monotype, 'paraphyletic')
 
         # Now with unrooted trees, and using species instead of names.
-        t = PhyloTree('(aaa1, (aaa3, (aaa4, (bbb1, bbb2))));')
+        t = PhyloTree('(aaa1, (aaa3, (aaa4, (bbb1, bbb2))));',
+                      sp_naming_function=lambda name: name[:3])
         # ─┬╴aaa1        # the species will be 'aaa' for this node, etc.
         #  ╰─┬╴aaa3
         #    ╰─┬╴aaa4
@@ -1470,50 +1509,57 @@ class Test_Core_Tree(unittest.TestCase):
                          (True, 'monophyletic', set()))
 
         # Variations on that tree.
-        t = PhyloTree('(aaa1, (bbb3, (aaa4, (bbb1, bbb2))));')
+        t = PhyloTree('(aaa1, (bbb3, (aaa4, (bbb1, bbb2))));',
+                      sp_naming_function=lambda name: name[:3])
         is_mono, _, extra = t.check_monophyly(values={'aaa'},
                                               prop='species', unrooted=True)
         self.assertFalse(is_mono)
         self.assertEqual(extra, {t['bbb3']})
 
-        t = PhyloTree('(aaa1, (aaa3, (aaa4, (bbb1, bbb2))));')
+        t = PhyloTree('(aaa1, (aaa3, (aaa4, (bbb1, bbb2))));',
+                      sp_naming_function=lambda name: name[:3])
         is_mono, _, extra = t.check_monophyly(values={'bbb'},
                                               prop='species', unrooted=True)
         self.assertTrue(is_mono)
         self.assertEqual(extra, set())
 
-        t = PhyloTree('(aaa1, (aaa3, (aaa4, (bbb1, ccc2))));')
+        t = PhyloTree('(aaa1, (aaa3, (aaa4, (bbb1, ccc2))));',
+                      sp_naming_function=lambda name: name[:3])
         is_mono, _, extra = t.check_monophyly(values={'bbb', 'ccc'},
                                               prop='species', unrooted=True)
         self.assertTrue(is_mono)
         self.assertEqual(extra, set())
 
-        t = PhyloTree('(aaa1, (aaa3, (bbb4, (bbb1, bbb2))));')
+        t = PhyloTree('(aaa1, (aaa3, (bbb4, (bbb1, bbb2))));',
+                      sp_naming_function=lambda name: name[:3])
         is_mono, _, extra = t.check_monophyly(values={'bbb4', 'bbb2'},
                                               prop='name', unrooted=True)
         self.assertFalse(is_mono)
         self.assertEqual(extra, {t['bbb1']})
 
-        t = PhyloTree('(aaa1, (aaa3, (bbb4, (bbb1, bbb2))));')
+        t = PhyloTree('(aaa1, (aaa3, (bbb4, (bbb1, bbb2))));',
+                      sp_naming_function=lambda name: name[:3])
         is_mono, _, extra = t.check_monophyly(values={'bbb1', 'bbb2'},
                                               prop='name', unrooted=True)
         self.assertTrue(is_mono)
         self.assertEqual(extra, set())
 
-        t = PhyloTree('(aaa1, aaa3, (aaa4, (bbb1, bbb2)));')
+        t = PhyloTree('(aaa1, aaa3, (aaa4, (bbb1, bbb2)));',
+                      sp_naming_function=lambda name: name[:3])
         is_mono, _, extra = t.check_monophyly(values={'aaa'},
                                               prop='species', unrooted=True)
         self.assertTrue(is_mono)
         self.assertEqual(extra, set())
 
-        t = PhyloTree('(aaa1, bbb3, (aaa4, (bbb1, bbb2)));')
+        t = PhyloTree('(aaa1, bbb3, (aaa4, (bbb1, bbb2)));',
+                      sp_naming_function=lambda name: name[:3])
         is_mono, _, extra = t.check_monophyly(values={'aaa'},
                                               prop='species', unrooted=True)
         self.assertFalse(is_mono)
         self.assertEqual(extra, {t['bbb3']})
 
         # # Check monophyly randomization test
-        # t = PhyloTree()
+        # t = PhyloTree(,
         # t.populate(100)
         # ancestor = t.common_ancestor(['aaaaaaaaaa', 'aaaaaaaaab', 'aaaaaaaaac'])
         # all_nodes = list(t.descendants())
@@ -1529,7 +1575,8 @@ class Test_Core_Tree(unittest.TestCase):
         # TODO: The previous test looks like it is wrong. Review with Jaime.
 
         # Testing get_monophyly
-        t = Tree('((((((4, e), i)M1, o),h), u), ((3, 4), (i, june))M2);')
+        t = Tree('((((((4, e), i)M1, o),h), u), ((3, 4), (i, june))M2);',
+                 parser=1)
         # we annotate the tree using external data
         colors = {'a': 'red', 'e': 'green', 'i': 'yellow',
                   'o': 'black', 'u': 'purple', '4':'green',
@@ -1538,17 +1585,19 @@ class Test_Core_Tree(unittest.TestCase):
         for leaf in t:
             leaf.add_props(color=colors.get(leaf.name, 'none'))
         green_yellow_nodes = {t['M1'], t['M2']}
-        mono_nodes = t.get_monophyletic(values=['green', 'yellow'], prop='color')
+        mono_nodes = t.get_monophyletic(values=['green', 'yellow'],
+                                        prop='color')
         self.assertEqual(set(mono_nodes), green_yellow_nodes)
 
     def test_copy(self):
-        t = Tree("((A, B)Internal_1:0.7, (C, D)Internal_2:0.5)root:1.3;")
+        t = Tree("((A, B)Internal_1:0.7, (C, D)Internal_2:0.5)root:1.3;",
+                 parser=1)
         # we add a custom annotation to the node named A
         t['A'].add_props(label="custom Value")
         # we add a complex feature to the A node, consisting of a list of lists
         t['A'].add_props(complex=[[0,1], [2,3], [1,11], [1,0]])
 
-        nw2 = t.write(props=None, format_root_node=True)
+        nw2 = t.write(props=None, format_root_node=True, parser=1)
 
         t_nw  = t.copy("newick")
         t_nwx = t.copy("newick-extended")

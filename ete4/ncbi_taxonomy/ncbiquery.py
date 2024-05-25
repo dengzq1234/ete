@@ -458,7 +458,7 @@ class NCBITaxa:
         return tree
 
     def annotate_tree(self, t, taxid_attr="name", tax2name=None,
-                      tax2track=None, tax2rank=None):
+                      tax2track=None, tax2rank=None, ignore_unclassified=False):
         """Annotate a tree containing taxids as leaf names.
 
         The annotation adds the properties: 'taxid', 'sci_name',
@@ -475,7 +475,7 @@ class NCBITaxa:
         taxids = set()
         for n in t.traverse():
             try:
-                tid = int(getattr(n, taxid_attr))
+                tid = int(getattr(n, taxid_attr, n.props.get(taxid_attr)))
             except (ValueError, AttributeError, TypeError):
                 pass
             else:
@@ -501,7 +501,7 @@ class NCBITaxa:
 
         for n in t.traverse('postorder'):
             try:
-                node_taxid = int(getattr(n, taxid_attr))
+                node_taxid = int(getattr(n, taxid_attr, n.props.get(taxid_attr)))
             except (ValueError, AttributeError, TypeError):
                 node_taxid = None
 
@@ -509,26 +509,30 @@ class NCBITaxa:
             if node_taxid:
                 if node_taxid in merged_conversion:
                     node_taxid = merged_conversion[node_taxid]
-                n.add_props(sci_name = tax2name.get(node_taxid, getattr(n, taxid_attr, '')),
+                n.add_props(sci_name = tax2name.get(node_taxid, getattr(n, taxid_attr, n.props.get(taxid_attr, ''))),
                                common_name = tax2common_name.get(node_taxid, ''),
                                lineage = tax2track.get(node_taxid, []),
                                rank = tax2rank.get(node_taxid, 'Unknown'),
                                named_lineage = [tax2name.get(tax, str(tax)) for tax in tax2track.get(node_taxid, [])])
             elif n.is_leaf:
-                n.add_props(sci_name = getattr(n, taxid_attr, 'NA'),
+                n.add_props(sci_name = getattr(n, taxid_attr, n.props.get(taxid_attr, 'NA')),
                                common_name = '',
                                lineage = [],
                                rank = 'Unknown',
                                named_lineage = [])
             else:
-                lineage = self._common_lineage([lf.props.get('lineage') for lf in n2leaves[n]])
+                if ignore_unclassified:
+                    vectors = [lf.props.get('lineage') for lf in n2leaves[n] if lf.props.get('lineage')]
+                else:
+                    vectors = [lf.props.get('lineage') for lf in n2leaves[n]]
+                lineage = self._common_lineage(vectors)
                 ancestor = lineage[-1]
                 n.add_props(sci_name = tax2name.get(ancestor, str(ancestor)),
-                               common_name = tax2common_name.get(ancestor, ''),
-                               taxid = ancestor,
-                               lineage = lineage,
-                               rank = tax2rank.get(ancestor, 'Unknown'),
-                               named_lineage = [tax2name.get(tax, str(tax)) for tax in lineage])
+                            common_name = tax2common_name.get(ancestor, ''),
+                            taxid = ancestor,
+                            lineage = lineage,
+                            rank = tax2rank.get(ancestor, 'Unknown'),
+                            named_lineage = [tax2name.get(tax, str(tax)) for tax in lineage])
 
         return tax2name, tax2track, tax2rank
 
@@ -699,7 +703,7 @@ def update_db(dbfile, targz_file=None):
 
 def update_local_taxdump(fname=DEFAULT_TAXDUMP):
     """Update contents of file fname with taxdump.tar.gz from the NCBI site."""
-    url = 'https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz'
+    url = 'https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz'
 
     if not os.path.exists(fname):
         print(f'Downloading {fname} from {url} ...')

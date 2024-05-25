@@ -6,6 +6,7 @@ instances.
 
 import sys
 import re
+import warnings
 import itertools
 from collections import defaultdict
 from ete4 import Tree, SeqGroup, NCBITaxa, GTDBTaxa
@@ -14,8 +15,6 @@ from . import spoverlap
 
 __all__ = ["PhyloTree"]
 
-def _parse_species(name):
-    return name[:3] if name is not None else ''
 
 def is_dup(n):
     return n.props.get("evoltype") == "D"
@@ -271,7 +270,7 @@ class PhyloTree(Tree):
     """
 
     def __init__(self, newick=None, children=None, alignment=None,
-                 alg_format="fasta", sp_naming_function=_parse_species,
+                 alg_format="fasta", sp_naming_function=None,
                  parser=None):
         """
         :param newick: If not None, initializes the tree from a newick,
@@ -300,6 +299,9 @@ class PhyloTree(Tree):
     @property
     def species(self):
         if self.props.get('_speciesFunction'):
+            if 'species' in self.props:
+                warnings.warn('Ambiguous species: both species and _speciesFunction'
+                             'defined. You can remove "species" from this node.')
             try:
                 return self.props.get('_speciesFunction')(self.name)
             except:
@@ -640,7 +642,7 @@ class PhyloTree(Tree):
         return prunned
 
 
-    def annotate_ncbi_taxa(self, taxid_attr='species', tax2name=None, tax2track=None, tax2rank=None, dbfile=None):
+    def annotate_ncbi_taxa(self, taxid_attr='species', tax2name=None, tax2track=None, tax2rank=None, dbfile=None, ignore_unclassified=False):
         """Add NCBI taxonomy annotation to all descendant nodes. Leaf nodes are
         expected to contain a feature (name, by default) encoding a valid taxid
         number.
@@ -692,11 +694,11 @@ class PhyloTree(Tree):
         """
 
         ncbi = NCBITaxa(dbfile=dbfile)
-        return ncbi.annotate_tree(self, taxid_attr=taxid_attr, tax2name=tax2name, tax2track=tax2track, tax2rank=tax2rank)
+        return ncbi.annotate_tree(self, taxid_attr=taxid_attr, tax2name=tax2name, tax2track=tax2track, tax2rank=tax2rank, ignore_unclassified=ignore_unclassified)
 
-    def annotate_gtdb_taxa(self, taxid_attr='species', tax2name=None, tax2track=None, tax2rank=None, dbfile=None):
+    def annotate_gtdb_taxa(self, taxid_attr='species', tax2name=None, tax2track=None, tax2rank=None, dbfile=None, ignore_unclassified=False):
         gtdb = GTDBTaxa(dbfile=dbfile)
-        return gtdb.annotate_tree(self, taxid_attr=taxid_attr, tax2name=tax2name, tax2track=tax2track, tax2rank=tax2rank)
+        return gtdb.annotate_tree(self, taxid_attr=taxid_attr, tax2name=tax2name, tax2track=tax2track, tax2rank=tax2rank, ignore_unclassified=ignore_unclassified)
 
     def ncbi_compare(self, autodetect_duplications=True, cached_content=None):
         if not cached_content:

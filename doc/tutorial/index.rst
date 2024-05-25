@@ -8,4 +8,7 @@ Contents:
 
    tutorial_trees
    tutorial_phylogeny
-   tutorial_drawing
+   tutorial_smartview
+   tutorial_treeview
+   tutorial_taxonomy
+   tutorial_treematcher

@@ -32,6 +32,21 @@ def unquote(name):
     else:
         return name
 
+def dirty_read(text):
+    """Return the float value of the given text, even if it contains errors."""
+    # This is a hack to be able to read newicks with errors.
+    try:
+        return float(text)
+    except ValueError:
+        unquoted_text = unquote(text)
+        support = unquoted_text.split(':')[0]
+
+        #name = unquoted_text.split(':')[1]
+        try:
+            support = float(support)
+            return float(support)
+        except ValueError:
+            return 1
 # A "property dict" has all the information for a property ('pname') to know
 # which function to apply to read/write from/to a string.
 #
@@ -40,18 +55,19 @@ def unquote(name):
 # Common IO parts in property dicts.
 STRING_IO = {'read': unquote, 'write': quote}
 NUMBER_IO = {'read': float,   'write': lambda x: '%g' % float(x)}
+DIRTY_NUMBER_IO = {'read': dirty_read, 'write': lambda x: '%g' % float(x)}
 
 # Common property dicts.
 NAME    = dict(STRING_IO, pname='name')
 DIST    = dict(NUMBER_IO, pname='dist')
 SUPPORT = dict(NUMBER_IO, pname='support')
-
+GTDB_SUPPORT = dict(DIRTY_NUMBER_IO, pname='support')
 # A "parser dict" says, for leaf and internal nodes, what 'p0:p1' means
 # (which properties they are, including how to read and write them).
 
 PARSER_DEFAULT = {
-    'leaf':     [NAME, DIST],  # ((name:dist)x:y);
-    'internal': [NAME, DIST],  # ((x:y)name:dist);
+    'leaf':     [NAME,    DIST],  # ((name:dist)x:y);
+    'internal': [SUPPORT, DIST],  # ((x:y)support:dist);
 }
 
 # This part is only used to read the old-fashioned int formats.
@@ -73,6 +89,7 @@ INT_PARSERS = {  # parsers corresponding to old-style integers
     8:   {'leaf': [NAME_REQ, EMPTY],    'internal': [NAME_REQ,    EMPTY]},
     9:   {'leaf': [NAME_REQ, EMPTY],    'internal': [EMPTY,       EMPTY]},
     100: {'leaf': [EMPTY,    EMPTY],    'internal': [EMPTY,       EMPTY]},
+    101: {'leaf': [NAME,     DIST],     'internal': [GTDB_SUPPORT,       DIST]},
 }
 
 def make_parser(number=1, name='%s', dist='%g', support='%g'):
@@ -212,6 +229,9 @@ def loads(tree_text, parser=None, tree_class=Tree):
     if not tree_text.endswith(';'):
         raise NewickError('text ends with no ";"')
 
+    if type(parser) == int:  # parser is an integer? (old-style/shortcut)
+        parser = INT_PARSERS[parser]  # substitute it for the actual parser
+
     if tree_text[0] == '(':
         nodes, pos = read_nodes(tree_text, parser, 0, tree_class)
     else:
@@ -226,7 +246,7 @@ def loads(tree_text, parser=None, tree_class=Tree):
     return tree_class(props, nodes)
 
 
-def read_nodes(nodes_text, parser, pos=0, tree_class=Tree):
+def read_nodes(nodes_text, parser, long pos=0, tree_class=Tree):
     """Return a list of nodes and the position in the text where they end."""
     # nodes_text looks like '(a,b,c)', where any element can be a list of nodes
     if nodes_text[pos] != '(':
@@ -253,7 +273,7 @@ def read_nodes(nodes_text, parser, pos=0, tree_class=Tree):
     return nodes, pos+1
 
 
-def skip_spaces_and_comments(text, pos):
+def skip_spaces_and_comments(text, long pos):
     """Return position in text after pos and all whitespaces and comments."""
     # text = '...  [this is a comment] node1...'
     #            ^-- pos               ^-- pos (returned)
@@ -271,7 +291,7 @@ def skip_spaces_and_comments(text, pos):
     return pos
 
 
-def read_content(text, pos, endings=',);'):
+def read_content(str text, long pos, endings=',);'):
     """Return content starting at position pos in text, and where it ends."""
     # text = '...(node_1:0.5[&&NHX:p=a],...'  ->  'node_1:0.5[&&NHX:p=a]'
     #             ^-- pos              ^-- pos (returned)
@@ -288,7 +308,7 @@ def read_content(text, pos, endings=',);'):
     return text[start:pos], pos
 
 
-def skip_quoted_name(text, pos):
+def skip_quoted_name(str text, long pos):
     """Return the position where a quoted name ends."""
     # text = "... 'node ''2'' in tree' ..."
     #             ^-- pos             ^-- pos (returned)
@@ -327,3 +347,4 @@ def dumps(tree, props=None, parser=None, format_root_node=True, is_leaf_fn=None)
 
 def dump(tree, fp, props=None, parser=None, format_root_node=True, is_leaf_fn=None):
     fp.write(dumps(tree, props, parser, format_root_node, is_leaf_fn))
+    fp.write('\n')

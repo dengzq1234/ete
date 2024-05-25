@@ -13,17 +13,17 @@ a console.
 
 
 def to_str(tree, show_internal=True, compact=False, props=None,
-           px=None, py=0, px0=0, waterfall=False):
+           px=None, py=None, px0=0, cascade=False):
     """Return a string containing an ascii drawing of the tree.
 
     :param show_internal: If True, show the internal nodes too.
     :param compact: If True, use exactly one line per tip.
     :param props: List of node properties to show. If None, show all.
     :param px, py, px0: Paddings (x, y, x for leaves). Overrides `compact`.
-    :param waterfall: Use a waterfall representation. Overrides
+    :param cascade: Use a cascade representation. Overrides
         `show_internal`, `compact`, `px`, `py`, `px0`.
     """
-    if not waterfall:
+    if not cascade:
         px = px if px is not None else (0 if show_internal else 1)
         py = py if py is not None else (0 if compact else 1)
 
@@ -31,7 +31,7 @@ def to_str(tree, show_internal=True, compact=False, props=None,
         return '\n'.join(lines)
     else:
         px = px if px is not None else 1
-        return to_waterfall(tree, props, px)
+        return to_cascade(tree, props, px)
 
 
 # For representations like:
@@ -133,8 +133,8 @@ def add_base(line, px, px0, txt, show_internal):
 #   │ └─╴d
 #   └─╴f
 
-def to_waterfall(tree, props=None, px=1, are_last=None):
-    """Return string with a visual representation of the tree as a waterfall."""
+def to_cascade(tree, props=None, px=1, are_last=None):
+    """Return string with a visual representation of the tree as a cascade."""
     are_last = are_last or []
 
     # Node description (including all the requested properties).
@@ -144,7 +144,7 @@ def to_waterfall(tree, props=None, px=1, are_last=None):
 
     branches = get_branches_repr(are_last, tree.is_leaf, px)
 
-    wf = lambda n, lasts: to_waterfall(n, props, px, lasts)  # shortcut
+    wf = lambda n, lasts: to_cascade(n, props, px, lasts)  # shortcut
 
     return '\n'.join([branches + descr] +
                      [wf(n, are_last + [False]) for n in tree.children[:-1]] +
@@ -171,3 +171,18 @@ def get_branches_repr(are_last, is_leaf, px):
 
     return (prefix   + ('└' if are_last[-1] else '├') +
             '─' * px + ('╴' if is_leaf      else '┐'))
+
+
+def to_repr(tree, depth=4, nchildren=3):
+    """Return a text representation that exactly recreates the tree.
+
+    If depth and nchildren are None, return the full representation.
+    """
+    children = tree.children[:nchildren]
+    depth_1 = depth if depth is None else depth - 1
+    children_repr = '...' if depth == 0 else (
+        ', '.join(to_repr(node, depth_1, nchildren) for node in children) +
+        ('' if nchildren is None or len(tree.children) <= nchildren
+         else ', ...'))
+
+    return 'Tree(%r, [%s])' % (tree.props, children_repr)

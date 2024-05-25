@@ -16,36 +16,87 @@ def sort(tree, key=None, reverse=False):
         node.children.sort(key=key, reverse=reverse)
 
 
-def set_outgroup(node, bprops=None):
-    """Reroot the tree at the given outgroup node.
+def root_at(node, bprops=None):
+    """Set the given node as the root of the tree.
 
     The original root node will be used as the new root node, so any
     reference to it in the code will still be valid.
 
-    :param node: Node where to set root (future first child of the root).
+    :param node: Node to set as root. Its reference will be lost.
     :param bprops: List of branch properties (other than "dist" and "support").
     """
-    old_root = node.root
+    root = node.root
+
+    if root is node:
+        return  # nothing to do!
+
+    assert_root_consistency(root, bprops)
+
     positions = node.id  # child positions from root to node (like [1, 0, ...])
 
-    assert_root_consistency(old_root, bprops)
-    assert node != old_root, 'cannot set the absolute tree root as outgroup'
+    interchange_references(root, node)  # root <--> node
+    old_root = node  # now "node" points to where the old root was
 
-    # Make a new node to replace the old root.
-    replacement = old_root.__class__()  # could be Tree() or PhyloTree(), etc.
-
-    children = old_root.remove_children()
-    replacement.add_children(children)  # take its children
-
-    # Now we can insert the old root, which has no children, in its new place.
-    insert_intermediate(node, old_root, bprops)
-
-    root = replacement  # current root, which will change in each iteration
+    current_root = old_root  # current root, which will change in each iteration
     for child_pos in positions:
-        root = rehang(root, child_pos, bprops)
+        current_root = rehang(current_root, child_pos, bprops)
 
-    if len(replacement.children) == 1:
-        join_branch(replacement)
+    if len(old_root.children) == 1:
+        join_branch(old_root, bprops)
+
+
+def interchange_references(node1, node2):
+    """Interchange the references of the given nodes.
+
+    node1 will point where node2 was, and viceversa.
+    """
+    if node1 is node2:
+        return
+
+    # Interchange properties.
+    node1.props, node2.props = node2.props, node1.props
+
+    # Interchange children.
+    children1 = node1.remove_children()
+    children2 = node2.remove_children()
+    node1.add_children(children2)
+    node2.add_children(children1)
+
+    # Interchange parents.
+    up1 = node1.up
+    up2 = node2.up
+    pos1 = up1.children.index(node1) if up1 else None
+    pos2 = up2.children.index(node2) if up2 else None
+
+    if up1 is not None:
+        up1.children.pop(pos1)
+        up1.children.insert(pos1, node2)
+
+    if up2 is not None:
+        up2.children.pop(pos2)
+        up2.children.insert(pos2, node1)
+
+    node1.up = up2
+    node2.up = up1
+
+
+def set_outgroup(node, bprops=None, dist=None):
+    """Change tree so the given node is set as outgroup.
+
+    The original root node will be used as the new root node, so any
+    reference to it in the code will still be valid.
+
+    :param node: Node to set as outgroup (future first child of the root).
+    :param bprops: List of branch properties (other than "dist" and "support").
+    :param dist: Distance from the node, where we put the new root of the tree.
+    """
+    assert not node.is_root, 'cannot set the absolute tree root as outgroup'
+    assert_root_consistency(node.root, bprops)
+
+    intermediate = node.__class__()  # could be Tree() or PhyloTree(), etc.
+    insert_intermediate(node, intermediate, bprops, dist)
+
+    root_at(intermediate, bprops)
 
 
 def assert_root_consistency(root, bprops=None):
@@ -56,13 +107,12 @@ def assert_root_consistency(root, bprops=None):
         assert pname not in root.props, f'root has branch property: {pname}'
 
     if len(root.children) == 2:
-        ch1, ch2 = root.children
-        s1, s2 = ch1.props.get('support'), ch2.props.get('support')
+        s1, s2 = [n.support for n in root.children]
         assert s1 == s2, 'inconsistent support at the root: %r != %r' % (s1, s2)
 
 
-def rehang(root, child_pos, bprops):
-    """Rehang node on its child at position child_pos and return it."""
+def rehang(root, child_pos, bprops=None):
+    """Rehang root on its child at position child_pos and return it."""
     # root === child  ->  child === root
     child = root.pop_child(child_pos)
 
@@ -70,7 +120,7 @@ def rehang(root, child_pos, bprops):
 
     swap_props(root, child, ['dist', 'support'] + (bprops or []))
 
-    return child  # which is now the parent of its previous parent
+    return child  # which is now the new root
 
 
 def swap_props(n1, n2, props):
@@ -84,7 +134,7 @@ def swap_props(n1, n2, props):
             n1.props[pname] = p2
 
 
-def insert_intermediate(node, intermediate, bprops=None):
+def insert_intermediate(node, intermediate, bprops=None, dist=None):
     """Insert, between node and its parent, an intermediate node."""
     # == up ======= node  ->  == up === intermediate === node
     up = node.up
@@ -95,7 +145,10 @@ def insert_intermediate(node, intermediate, bprops=None):
     intermediate.add_child(node)
 
     if 'dist' in node.props:  # split dist between the new and old nodes
-        node.dist = intermediate.dist = node.dist / 2
+        if dist is not None:
+            node.dist, intermediate.dist = dist, node.dist - dist
+        else:
+            node.dist = intermediate.dist = node.dist / 2
 
     for prop in ['support'] + (bprops or []):  # copy other branch props if any
         if prop in node.props:
@@ -105,16 +158,17 @@ def insert_intermediate(node, intermediate, bprops=None):
     intermediate.up = up
 
 
-def join_branch(node):
+def join_branch(node, bprops=None):
     """Substitute node for its only child."""
     # == node ==== child  ->  ====== child
     assert len(node.children) == 1, 'cannot join branch with multiple children'
 
     child = node.children[0]
 
-    if 'support' in node.props and 'support' in child.props:
-        assert node.support == child.support, \
-            'cannot join branches with different support'
+    for pname in ['support'] + (bprops or []):
+        if pname in node.props or pname in child.props:
+            assert node.props.get(pname) == child.props.get(pname), \
+                f'cannot join branches with different branch property: {pname}'
 
     if 'dist' in node.props:
         child.dist = (child.dist or 0) + node.dist  # restore total dist
@@ -124,6 +178,21 @@ def join_branch(node):
     up.children.pop(pos_in_parent)  # detach from parent
     up.children.insert(pos_in_parent, child)  # put child where the old node was
     child.up = up
+
+
+def unroot(tree, bprops=None):
+    """Unroot the tree (make the root not have 2 children).
+
+    The convention in phylogenetic trees is that if the root has 2
+    children, it is a "rooted" tree (the root is a real ancestor).
+    Otherwise (typically a root with 3 children), the root is just
+    an arbitrary place to hang the tree.
+    """
+    assert tree.is_root, 'unroot only makes sense from the root node'
+    if len(tree.children) == 2:
+        n1, n2 = tree.children
+        assert not (n1.is_leaf and n2.is_leaf), 'tree has just two leaves'
+        root_at(n1 if not n1.is_leaf else n2, bprops)
 
 
 def move(node, shift=1):
@@ -169,75 +238,126 @@ def common_ancestor(nodes):
     return curr  # which is now the last common ancestor of all nodes
 
 
-def populate(tree, size, names_library=None, random_branches=False,
-             dist_range=(0, 1), support_range=(0, 1)):
-    """Populate tree with branches generating a random topology.
+def populate(tree, size, names=None, model='yule',
+             dist_fn=None, support_fn=None):
+    """Populate tree with a dichotomic random topology.
 
-    All the nodes added will either be leaves or have two branches.
-
-    :param size: Number of leaves to add. The necessary
-        intermediate nodes will be created too.
-    :param names_library: Collection (list or set) used to name leaves.
+    :param size: Number of leaves to add. All necessary intermediate
+        nodes will be created too.
+    :param names: Collection (list or set) of names to name the leaves.
         If None, leaves will be named using short letter sequences.
-    :param random_branches: If True, branch distances and support
-        values will be randomized.
-    :param dist_range: Range (tuple with min and max) of distances
-        used to generate branch distances if random_branches is True.
-    :param support_range: Range (tuple with min and max) of distances
-        used to generate branch supports if random_branches is True.
+    :param model: Model used to generate the topology. It can be:
+
+        - "yule" or "yule-harding": Every step a randomly selected leaf
+          grows two new children.
+        - "uniform" or "pda": Every step a randomly selected node (leaf
+          or interior) grows a new sister leaf.
+
+    :param dist_fn: Function to produce values to set as distance
+        in newly created branches, or None for no distances.
+    :param support_fn: Function to produce values to set as support
+        in newly created internal branches, or None for no supports.
     """
-    assert names_library is None or len(names_library) >= size, \
-        f'names_library too small ({len(names_library)}) for size {size}'
+    assert names is None or len(names) >= size, \
+        f'names too small ({len(names)}) for size {size}'
 
-    NewNode = tree.__class__
+    root = tree if not tree.children else create_dichotomic_sister(tree)
 
-    if len(tree.children) > 1:
-        connector = NewNode()
-        for ch in tree.get_children():
-            ch.detach()
-            connector.add_child(ch)
-        root = NewNode()
-        tree.add_child(connector)
-        tree.add_child(root)
+    if model in ['yule', 'yule-harding']:
+        populate_yule(root, size)
+    elif model in ['uniform', 'pda']:
+        populate_uniform(root, size)
     else:
-        root = tree
+        raise ValueError(f'unknown model: {model}')
 
-    next_deq = deque([root])  # will contain the current leaves
-    for i in range(size - 1):
-        p = next_deq.popleft() if random.randint(0, 1) else next_deq.pop()
+    if dist_fn or support_fn:
+        add_branch_values(root, dist_fn, support_fn)
 
-        c1 = p.add_child()
-        c2 = p.add_child()
+    add_leaf_names(root, names)
 
-        next_deq.extend([c1, c2])
 
-        if random_branches:
-            c1.dist = random.uniform(*dist_range)
-            c2.dist = random.uniform(*dist_range)
-            c1.support = random.uniform(*support_range)
-            c2.support = random.uniform(*support_range)
-        else:
-            c1.dist = 1.0
-            c2.dist = 1.0
-            c1.support = 1.0
-            c2.support = 1.0
+def create_dichotomic_sister(tree):
+    """Make tree start with a dichotomy, with the old tree and a new sister."""
+    children = tree.remove_children()  # pass all the children to a connector
+    connector = tree.__class__(children=children)
+    sister = tree.__class__()  # new sister, dichotomic with the old tree
+    tree.add_children([connector, sister])
+    return sister
 
-    # Give names to leaves.
-    if names_library is not None:
-        for node, name in zip(next_deq, names_library):
+
+def populate_yule(root, size):
+    """Populate with the Yule-Harding model a topology with size leaves."""
+    leaves = [root]  # will contain the current leaves
+    for _ in range(size - 1):
+        leaf = leaves.pop( random.randrange(len(leaves)) )
+
+        node0 = leaf.add_child()
+        node1 = leaf.add_child()
+
+        leaves.extend([node0, node1])
+
+
+def populate_uniform(root, size):
+    """Populate with the uniform model a topology with size leaves."""
+    if size < 2:
+        return
+
+    child0 = root.add_child()
+    child1 = root.add_child()
+
+    nodes = [child0]  # without child1, since it is in the same branch!
+
+    for _ in range(size - 2):
+        node = random.choice(nodes)  # random node (except root and child1)
+
+        if node is child0 and random.randint(0, 1) == 1:  # 50% chance
+            node = child1  # take the other child
+
+        intermediate = root.__class__()  # could be Tree(), PhyloTree()...
+        insert_intermediate(node, intermediate)  # ---up---inter---node
+        leaf = intermediate.add_child()          # ---up---inter===node,leaf
+        random.shuffle(intermediate.children)  # [node,leaf] or [leaf,node]
+
+        nodes.extend([intermediate, leaf])
+
+
+def add_branch_values(root, dist_fn, support_fn):
+    """Add distances and support values to the branches."""
+    for node in root.descendants():
+        if dist_fn:
+            node.dist = dist_fn()
+        if support_fn and not node.is_leaf:
+            node.support = support_fn()
+
+    # Make sure the children of root have the same support.
+    if any(node.support is None for node in root.children):
+        for node in root.children:
+            node.props.pop('support', None)
+    else:
+        for node in root.children[1:]:
+            node.support = root.children[0].support
+
+
+def add_leaf_names(root, names):
+    """Add names to the leaves."""
+    leaves = list(root.leaves())
+    random.shuffle(leaves)  # so we name them in no particular order
+    if names is not None:
+        for node, name in zip(leaves, names):
             node.name = name
     else:
-        chars = 'abcdefghijklmnopqrstuvwxyz'
+        for i, node in enumerate(leaves):
+            node.name = make_name(i)
 
-        for i, node in enumerate(next_deq):
-            # Create a short name corresponding to the index i.
-            # 0: 'a', 1: 'b', ..., 25: 'z', 26: 'aa', 27: 'ab', ...
-            name = ''
-            while i >= 0:
-                name = chars[i % len(chars)] + name
-                i = i // len(chars) - 1
 
-            node.name = name
+def make_name(i, chars='abcdefghijklmnopqrstuvwxyz'):
+    """Return a short name corresponding to the index i."""
+    # 0: 'a', 1: 'b', ..., 25: 'z', 26: 'aa', 27: 'ab', ...
+    name = ''
+    while i >= 0:
+        name = chars[i % len(chars)] + name
+        i = i // len(chars) - 1
+    return name
 
 
 def ladderize(tree, topological=False, reverse=False):
@@ -288,6 +408,12 @@ def ladderize(tree, topological=False, reverse=False):
                 sizes.pop(n)  # free memory, no need to keep all the sizes
 
 
+def to_dendrogram(tree):
+    """Convert tree to dendrogram (remove all distance values)."""
+    for node in tree.traverse():
+        node.props.pop('dist', None)
+
+
 def to_ultrametric(tree, topological=False):
     """Convert tree to ultrametric (all leaves equidistant from root)."""
     tree.dist = tree.dist or 0  # covers common case of not having dist set
@@ -310,7 +436,138 @@ def to_ultrametric(tree, topological=False):
             node.dist *= (dist_full - d) / node.size[0]
 
 
+def resolve_polytomy(tree, descendants=True):
+    """Convert tree to a series of dicotomies if it is a polytomy.
+
+    A polytomy is a node that has more than 2 children. This
+    function changes them to a ladderized series of dicotomic
+    branches. The tree topology modification is arbitrary (no
+    important results should depend on it!).
+
+    :param descendants: If True, resolve all polytomies in the tree,
+        including all root descendants. Otherwise, do it only for the root.
+    """
+    for node in tree.traverse():
+        if len(node.children) > 2:
+            children = node.remove_children()  #  x ::: a,b,c,d,e
+
+            # Create "backbone" nodes:  x --- * --- * ---
+            for i in range(len(children) - 2):
+                node = node.add_child(dist=0, support=0)
+
+            # Add children in order:  x === d,* === c,* === b,a
+            node.add_child(children[0])  # first:  x --- * --- * --- a
+            for i in range(1, len(children)):
+                node.add_child(children[i], support=0)
+                node = node.up
+
+        if not descendants:
+            break
+
+
+def farthest_descendant(tree, topological=False):
+    """Return the farthest descendant and its distance."""
+    d = (lambda node: 1) if topological else (lambda node: node.dist)  # dist
+
+    dist_root = {tree: 0}  # will contain all distances to the root
+
+    node_farthest, dist_farthest = tree, 0
+    for node in traverse(tree, order=-1):  # traverse in preorder
+        if node is not tree:
+            dist_root[node] = dist = dist_root[node.up] + d(node)
+            if dist > dist_farthest:
+                node_farthest, dist_farthest = node, dist
+
+    return node_farthest, dist_farthest
+
+
+def farthest(tree, topological=False):
+    """Return the farthest nodes and the diameter of the tree."""
+    d = (lambda node: 1) if topological else (lambda node: node.dist)  # dist
+
+    def last(x):
+        return x[-1]  # return the last element (used later for comparison)
+
+    # Part 1: Find the farthest descendant for all nodes.
+
+    fd = {}  # dict of {node: (farthest_descendant, dist_from_parent_to_it)}
+    for node in traverse(tree, order=+1):  # traverse in postorder
+        if node.is_leaf:
+            fd[node] = (node, d(node))
+        else:
+            f_leaf, dist = max((fd[n] for n in node.children), key=last)
+            fd[node] = (f_leaf, (d(node) if node is not tree else 0) + dist)
+
+    # Part 2: Find the extremes and the diameter.
+
+    # The first extreme is fixed. The second and the diameter will be updated.
+    extreme1, diameter = fd[tree]  # first extreme: farthest node from the root
+    extreme2 = tree  # so far, but may change later
+
+    # Go towards the root, updating the second extreme and diameter.
+    prev = extreme1  # the node that we saw previous to the current one
+    curr = extreme1.up  # the current node we are visiting
+    d_curr_e1 = d(extreme1)  # distance from current to the 1st extreme
+    while curr is not tree.up:
+        leaf, dist = max((fd[n] for n in curr.children if n is not prev),
+                         default=(curr, 0), key=last)
+        if dist + d_curr_e1 > diameter:
+            extreme2, diameter = leaf, dist + d_curr_e1
+
+        d_curr_e1 += d(curr) if curr is not tree else 0
+        prev, curr = curr, curr.up
+
+    return extreme1, extreme2, diameter
+
+
+def midpoint(tree, topological=False):
+    """Return the node in the middle and its distance from the exact center."""
+    d = (lambda node: 1) if topological else (lambda node: node.dist)
+
+    # Find the farthest node and diameter.
+    node, _, diameter = farthest(tree, topological)
+
+    # Go thru ancestor nodes until we cover more distance than the tree radius.
+    dist = diameter / 2 - d(node)  # radius of the tree minus branch dist
+    while dist > 0:
+        node = node.up
+        dist -= d(node)
+
+    return node, dist + d(node)  # NOTE: `dist` is negative
+
+
+def set_midpoint_outgroup(tree, topological=False):
+    node, dist = midpoint(tree, topological)
+    set_outgroup(node, dist=dist)
+
+
 # Traversing the tree.
+
+def traverse(tree, order=-1, is_leaf_fn=None):
+    """Traverse the tree and yield nodes in pre (< 0) or post (> 0) order."""
+    visiting = [(tree, False)]
+    while visiting:
+        node, seen = visiting.pop()
+
+        is_leaf = is_leaf_fn(node) if is_leaf_fn else node.is_leaf
+
+        if is_leaf or (order <= 0 and not seen) or (order >= 0 and seen):
+            yield node
+
+        if not seen and not is_leaf:
+            visiting.append((node, True))  # add node back, but mark as seen
+            visiting += [(n, False) for n in node.children[::-1]]
+
+
+def traverse_bfs(tree, is_leaf_fn=None):
+    """Yield nodes with a breadth-first search (level order traversal)."""
+    visiting = deque([tree])
+    while visiting:
+        node = visiting.popleft()
+        yield node
+        if not is_leaf_fn or not is_leaf_fn(node):
+            visiting.extend(node.children)
+
 
 # Position on the tree: current node, number of visited children.
 TreePos = namedtuple('TreePos', 'node nch')
@@ -374,14 +631,13 @@ def walk(tree):
 
 def update_sizes_all(tree):
     """Update sizes of all the nodes in the tree."""
-    for node in tree.children:
-        update_sizes_all(node)
-    update_size(tree)
+    for node in tree.traverse('postorder'):
+        update_size(node)
 
 
 def update_sizes_from(node):
     """Update the sizes from the given node to the root of the tree."""
-    while node:
+    while node is not None:
         update_size(node)
         node = node.up
 
@@ -406,19 +662,3 @@ cdef (double, double) get_size(nodes):
         nleaves += node.size[1]
 
     return sumdists, nleaves
-
-
-# Convenience (hackish) functions.
-
-def maybe_convert_internal_nodes_to_support(tree):
-    """Convert if possible the values in internal nodes to support values."""
-    # Often someone loads a newick looking like  ((a,b)s1,(c,d)s2,...)
-    # where s1, s2, etc. are support values, not names. But they use the
-    # wrong newick parser. Well, this function tries to hackishly fix that.
-    for node in tree.traverse():
-        if not node.is_leaf and node.name:
-            try:
-                node.support = float(node.name)
-                node.name = ''
-            except ValueError:
-                pass

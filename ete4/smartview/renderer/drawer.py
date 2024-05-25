@@ -24,15 +24,15 @@ def get_empty_active():
     return TreeActive(nodes, clades)
 
 
-# They are all "generalized coordinates" (can be radius and angle, say).
-
+# The coordinates (x, y, dx, dy) are all "generalized coordinates" (x and y
+# can refer to radius and angle, for example).
 
 # The convention for coordinates is:
 #   x increases to the right, y increases to the bottom.
 #
 #  +-----> x          +------.
-#  |                   \   a .
-#  |                    \   .   (the angle thus increases clockwise too)
+#  |                   \     .
+#  |                    \   . a    (the angle thus increases clockwise too)
 #  v y                 r \.
 #
 # This is the convention normally used in computer graphics, including SVGs,
@@ -40,15 +40,16 @@ def get_empty_active():
 #
 # The boxes (shapes) we use are:
 #
-# * Rectangle         w
-#              x,y +-----+          so (x,y) is its (left,top) corner
-#                  |     | h        and (x+w,y+h) its (right,bottom) one
-#                  +-----+
+# * Rectangle            w
+#                 x,y +-----+      so (x,y) is its (left,top) corner
+#                     |     | h    and (x+w,y+h) its (right,bottom) one
+#                     +-----+
 #
-# * Annular sector   r,a .----.
-#                       .  dr .     so (r,a) is its (inner,smaller-angle) corner
-#                       \   .       and (r+dr,a+da) its (outer,bigger-angle) one
-#                        \. da
+# * Annular sector       dr
+#                  r,a .----.
+#                     .     .      so (r,a) is its (inner,smaller-angle) corner
+#                      \   . da    and (r+dr,a+da) its (outer,bigger-angle) one
+#                       \.
 
 # Drawing.
 
@@ -542,6 +543,12 @@ class DrawerRect(Drawer):
                 dx, dy = 2 * size / zx, 2 * size / zy
                 box = (x - dx/2, y - dy/2, dx, dy)
                 yield dh.draw_rect(box, rect_type='nodedot ' + active_node, style=nodedot_style)
+            elif style['shape'] == "triangle":
+                x, y = center
+                zx, zy, _ = self.zoom
+                dx, dy = 2 * size / zx, 2 * size / zy
+                box = (x - dx/2, y - dy/2, dx, dy)
+                yield dh.draw_triangle(box, "top", triangle_type='nodedot ' + active_node, style=nodedot_style)
 
     def draw_nodebox(self, node, node_id, box, searched_by, style=None):
         yield dh.draw_nodebox(box, node.name, self.get_popup_props(node),

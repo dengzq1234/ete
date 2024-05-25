@@ -24,25 +24,42 @@ const aa = [
     '-'
 ];
 
+const gradients = [
+    'a', 'b', 'c',
+    'd', 'e', 'f',
+    'g', 'h', 'i',
+    'j', 'k', 'l',
+    'm', 'n', 'o',
+    'p', 'q', 'r', 
+    's', 't', '-', 
+    'x', 'z'
+];
 
 // Load texture atlas
 PIXI.Loader.shared
     .add(aa.map(a => ({name: `aa_notext_${a}`, url: `images/aa_notext/${a}.png`})))
     .add(aa.map(a => ({name: `aa_text_${a}`,   url: `images/aa_text/${a}.png`})))
+    .add(gradients.map(gradient => ({name: `gradients_${gradient}`, url: `images/gradients/${gradient}.png`})))
     .add("block", "images/block.png")
     .load(() => {
         const resources = PIXI.Loader.shared.resources;  // shortcut
 
         const textures_notext = {};
         const textures_text = {};
+        const textures_gradients = {};
+        
         for (const a of aa) {
             textures_notext[a] = resources[`aa_notext_${a}`].texture;
             textures_text[a] = resources[`aa_text_${a}`].texture;
+        }
+        for (const gradient of gradients) {
+            textures_gradients[gradient] = resources[`gradients_${gradient}`].texture;
         }
 
         textures = {
             aa_notext: textures_notext,
             aa_text: textures_text,
+            gradients:textures_gradients,
             shapes: {
                 block: resources.block.texture,
             }
@@ -84,21 +101,15 @@ function draw_pixi(container, items, tl, zoom) {
 
 // Add items to app.stage.
 function draw(items, tl, zoom) {
-    items.forEach(item => {
-        const [el, box] = [item[0], item[1]];  // el === "pixi-TYPE"
-        const type = el.split("-")[1]  // "aa_text" or "aa_notext"
-
-        const [zx, zy] = [zoom.x, zoom.y];
-
-        // Interpret (and draw) the item depending on its "type".
-        if (["aa_notext", "aa_text", "nt_notext", "nt_text"].includes(type)) {
-            const sequence = item[2];
-            draw_msa(sequence, type, box, tl, zx, zy);
-        }
-        else {
-            draw_shape(type, box, tl, zx, zy);
-        }
-    });
+    items.forEach(seq => {
+        const [ el, box ] = [ seq[0], seq[1] ];
+        const type = el.split("-")[1]
+        const [ zx, zy ] = [ zoom.x, zoom.y ];
+        if (["aa_notext", "aa_text", "nt_notext", "nt_text", 'gradients'].includes(type))
+            draw_msa(seq[2], type, box, tl, zx, zy);
+        else
+            draw_shape(type, box, tl, zx, zy)
+    })
 }
 
 

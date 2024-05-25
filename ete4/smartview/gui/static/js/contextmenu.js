@@ -79,7 +79,7 @@ async function add_node_options(box, name, properties, node_id) {
     add_button("Download branch as newick", () => download_newick(node_id),
                "Download subtree starting at this node as a newick file.",
                "download", false);
-    const nid = get_tid() + "," + node_id;
+    const nid = get_tid() + (node_id.length > 0 ? ("," + node_id) : "");
     const nseq = Number(await api(`/trees/${nid}/nseq`));
     if (nseq > 0)
         add_button("Download " + (nseq === 1 ? "sequence" : `leaf sequences (${nseq})`),
@@ -295,11 +295,11 @@ async function add_node_modifying_options(properties, nodestyle, node_id) {
     }, "Edit the content of this node. Changes the tree structure.",
        "edit", true);
     if (!view.subtree) {
-        add_button("Root on this node", async () => {
-            await tree_command("root_at", node_id);
+        add_button("Set node as outgroup", async () => {
+            await tree_command("set_outgroup", node_id);
             draw_minimap();
             update();
-        }, "Set this node as the root of the tree. Changes the tree structure.",
+        }, "Set this node as the 1st child of the root. Changes the tree structure.",
            "root", true);
     }
     add_button("Move branch up", async () => {

@@ -17,6 +17,7 @@ import re
 import platform
 from subprocess import Popen, DEVNULL
 from threading import Thread
+import socket
 from importlib import reload as module_reload
 from math import pi, inf
 from time import time, sleep
@@ -83,7 +84,7 @@ g_threads = {}
 
 # Dataclass containing info specific to each tree
 @dataclass
-class AppTree:
+class TreeData:
     tree: Tree = None
     name: str = None
     style: TreeStyle = None
@@ -92,6 +93,7 @@ class AppTree:
     exclude_props: list = None
     layouts: list = None
     timer: float = None
+    ultrametric: bool = False
     initialized: bool = False
     selected: dict = None
     active: namedtuple = None  # active nodes
@@ -212,53 +214,54 @@ def callback():
         abort(404, 'invalid path /trees in safe_mode mode')
 
     response.content_type = 'application/json'
-    return json.dumps([{'id': i, 'name': v.name} for i, v in app.trees.items()])
+    return json.dumps([{'id': tid, 'name': tdata.name}
+                       for tid, tdata in app.trees.items()])
 
 def touch_and_get(tree_id):
-    """Load tree, update its timer, and return the tree object and subtree."""
+    """Load tree, update its timer, and return the tree data object and subtree."""
     tid, subtree = get_tid(tree_id)
     load_tree(tree_id)  # load if it was not loaded in memory
-    tree = app.trees[tid]
-    tree.timer = time()  # update the tree's timer
-    return tree, subtree
+    tree_data = app.trees[tid]
+    tree_data.timer = time()  # update the tree's timer
+    return tree_data, subtree
 
 @get('/trees/<tree_id>')
 def callback(tree_id):
     if app.safe_mode:
         abort(404, f'invalid path /trees/{tree_id} in safe_mode mode')
 
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     props = set()
-    for node in tree.tree[subtree].traverse():
+    for node in tree_data.tree[subtree].traverse():
         props |= {k for k in node.props if not k.startswith('_')}
 
-    return {'name': tree.name, 'props': list(props)}
+    return {'name': tree_data.name, 'props': list(props)}
 
 @get('/trees/<tree_id>/nodeinfo')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    return tree.tree[subtree].props
+    tree_data, subtree = touch_and_get(tree_id)
+    return tree_data.tree[subtree].props
 
 @get('/trees/<tree_id>/nodestyle')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
     response.content_type = 'application/json'
-    return json.dumps(tree.tree[subtree].sm_style)
+    return json.dumps(tree_data.tree[subtree].sm_style)
 
 @get('/trees/<tree_id>/editable_props')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
-    return {k: v for k, v in tree.tree[subtree].props.items()
+    return {k: v for k, v in tree_data.tree[subtree].props.items()
             if k not in ['tooltip', 'hyperlink'] and type(v) in [int, float, str]}
     # TODO: Document what the hell is going on here.
 
 @get('/trees/<tree_id>/name')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
     response.content_type = 'application/json'
-    return json.dumps(tree.name)
+    return json.dumps(tree_data.name)
 
 @get('/trees/<tree_id>/newick')
 def callback(tree_id):
@@ -268,27 +271,27 @@ def callback(tree_id):
 
 @get('/trees/<tree_id>/seq')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     def fasta(node):
         name = node.name if node.name else ','.join(map(str, node.id))
         return '>' + name + '\n' + node.props['seq']
 
     response.content_type = 'application/json'
-    return json.dumps('\n'.join(fasta(leaf) for leaf in tree.tree[subtree].leaves()
+    return json.dumps('\n'.join(fasta(leaf) for leaf in tree_data.tree[subtree].leaves()
                       if leaf.props.get('seq')))
 
 @get('/trees/<tree_id>/nseq')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
     response.content_type = 'application/json'
-    return json.dumps(sum(1 for leaf in tree.tree[subtree].leaves() if leaf.props.get('seq')))
+    return json.dumps(sum(1 for leaf in tree_data.tree[subtree].leaves() if leaf.props.get('seq')))
 
 @get('/trees/<tree_id>/all_selections')
 def callback(tree_id):
-    tree, _ = touch_and_get(tree_id)
+    tree_data, _ = touch_and_get(tree_id)
     return {'selected': {name: {'nresults': len(results), 'nparents': len(parents)}
-                         for name, (results, parents) in (tree.selected or {}).items()}}
+                         for name, (results, parents) in (tree_data.selected or {}).items()}}
 
 @get('/trees/<tree_id>/selections')
 def callback(tree_id):
@@ -316,8 +319,8 @@ def callback(tree_id):
 
 @get('/trees/<tree_id>/selection/info')
 def callback(tree_id):
-    tree, _ = touch_and_get(tree_id)
-    return get_selection_info(tree, request.query)
+    tree_data, _ = touch_and_get(tree_id)
+    return get_selection_info(tree_data, request.query)
 
 @get('/trees/<tree_id>/search_to_selection')
 def callback(tree_id):
@@ -331,13 +334,13 @@ def callback(tree_id):
 
 @get('/trees/<tree_id>/active')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    node = tree.tree[subtree]
+    tree_data, subtree = touch_and_get(tree_id)
+    node = tree_data.tree[subtree]
 
     response.content_type = 'application/json'
-    if get_active_clade(node, tree.active.clades.results):
+    if get_active_clade(node, tree_data.active.clades.results):
         return json.dumps('active_clade')
-    elif node in tree.active.nodes.results:
+    elif node in tree_data.active.nodes.results:
         return json.dumps('active_node')
     else:
         return json.dumps('')
@@ -364,52 +367,52 @@ def callback(tree_id):
 
 @get('/trees/<tree_id>/store_active_nodes')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    nresults, nparents = store_active(tree, 0, request.query)
+    tree_data, subtree = touch_and_get(tree_id)
+    nresults, nparents = store_active(tree_data, 0, request.query)
     return {'message': 'ok', 'nresults': nresults, 'nparents': nparents}
 
 @get('/trees/<tree_id>/store_active_clades')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    nresults, nparents = store_active(tree, 1, request.query)
+    tree_data, subtree = touch_and_get(tree_id)
+    nresults, nparents = store_active(tree_data, 1, request.query)
     return {'message': 'ok', 'nresults': nresults, 'nparents': nparents}
 
 @get('/trees/<tree_id>/remove_active_nodes')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    remove_active(tree, 0)
+    tree_data, subtree = touch_and_get(tree_id)
+    remove_active(tree_data, 0)
     return {'message': 'ok'}
 
 @get('/trees/<tree_id>/remove_active_clades')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    remove_active(tree, 1)
+    tree_data, subtree = touch_and_get(tree_id)
+    remove_active(tree_data, 1)
     return {'message': 'ok'}
 
 @get('/trees/<tree_id>/all_active')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
     return {
-        'nodes': get_nodes_info(tree.tree, tree.active.nodes.results, ['*']),
-        'clades': get_nodes_info(tree.tree, tree.active.clades.results, ['*']),
+        'nodes': get_nodes_info(tree_data.active.nodes.results, ['*']),
+        'clades': get_nodes_info(tree_data.active.clades.results, ['*']),
     }
 
 @get('/trees/<tree_id>/all_active_leaves')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
-    active_leaves = set(n for n in tree.active.nodes.results if n.is_leaf)
-    for n in tree.active.clades.results:
+    active_leaves = set(n for n in tree_data.active.nodes.results if n.is_leaf)
+    for n in tree_data.active.clades.results:
         active_leaves.update(set(n.leaves()))
 
-    return get_nodes_info(tree.tree, active_leaves, ['*'])
+    return get_nodes_info(active_leaves, ['*'])
 
 # Searches
 @get('/trees/<tree_id>/searches')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
     return {'searches': {text: {'nresults': len(results), 'nparents': len(parents)}
-                         for text, (results, parents) in (tree.searches or {}).items()}}
+                         for text, (results, parents) in (tree_data.searches or {}).items()}}
 
 @get('/trees/<tree_id>/search')
 def callback(tree_id):
@@ -424,8 +427,8 @@ def callback(tree_id):
 # Find
 @get('/trees/<tree_id>/find')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    node = find_node(tree.tree, request.query)
+    tree_data, subtree = touch_and_get(tree_id)
+    node = find_node(tree_data.tree, request.query)
     node_id = ','.join(map(str, node.id))
     return {'id': node_id}
 
@@ -447,22 +450,22 @@ def callback(tree_id):
 
 @get('/trees/<tree_id>/size')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
-    width, height = tree.tree[subtree].size
+    tree_data, subtree = touch_and_get(tree_id)
+    width, height = tree_data.tree[subtree].size
     return {'width': width, 'height': height}
 
 @get('/trees/<tree_id>/collapse_size')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
     response.content_type = 'application/json'
-    return json.dumps(tree.style.collapse_size)
+    return json.dumps(tree_data.style.collapse_size)
 
 @get('/trees/<tree_id>/properties')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     props = set()
-    for node in tree.tree[subtree].traverse():
+    for node in tree_data.tree[subtree].traverse():
         props |= node.props.keys()
 
     response.content_type = 'application/json'
@@ -474,10 +477,10 @@ def callback(tree_id, pname):
 
 @get('/trees/<tree_id>/nodecount')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     tnodes = tleaves = 0
-    for node in tree.tree[subtree].traverse():
+    for node in tree_data.tree[subtree].traverse():
         tnodes += 1
         if node.is_leaf:
             tleaves += 1
@@ -486,9 +489,9 @@ def callback(tree_id):
 
 @get('/trees/<tree_id>/ultrametric')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
     response.content_type = 'application/json'
-    return json.dumps(tree.style.ultrametric)
+    return json.dumps(tree_data.ultrametric)
 
 @post('/trees')
 def callback():
@@ -496,48 +499,43 @@ def callback():
     response.status = 201
     return {'message': 'ok', 'ids': ids}
 
-@put('/trees/<tree_id>')
-def callback(tree_id):
-    modify_tree_fields(tree_id)
-    return {'message': 'ok'}
-
 @put('/trees/<tree_id>/sort')
 def callback(tree_id):
     node_id, key_text, reverse = req_json()
     sort(tree_id, node_id, key_text, reverse)
     return {'message': 'ok'}
 
-@put('/trees/<tree_id>/root_at')
+@put('/trees/<tree_id>/set_outgroup')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     if subtree:
         abort(400, 'operation not allowed with subtree')
 
     node_id = req_json()
-    tree.tree.set_outgroup(tree.tree[node_id])
-    ops.update_sizes_all(tree.tree)
+    tree_data.tree.set_outgroup(tree_data.tree[node_id])
+    ops.update_sizes_all(tree_data.tree)
     return {'message': 'ok'}
 
 @put('/trees/<tree_id>/move')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     try:
         node_id, shift = req_json()
-        ops.move(tree.tree[subtree][node_id], shift)
+        ops.move(tree_data.tree[subtree][node_id], shift)
         return {'message': 'ok'}
     except AssertionError as e:
         abort(400, f'cannot move {node_id}: {e}')
 
 @put('/trees/<tree_id>/remove')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     try:
         node_id = req_json()
-        ops.remove(tree.tree[subtree][node_id])
-        ops.update_sizes_all(tree.tree)
+        ops.remove(tree_data.tree[subtree][node_id])
+        ops.update_sizes_all(tree_data.tree)
         return {'message': 'ok'}
     except AssertionError as e:
         abort(400, f'cannot remove {node_id}: {e}')
@@ -545,9 +543,9 @@ def callback(tree_id):
 @put('/trees/<tree_id>/rename')
 def callback(tree_id):
     try:
-        tree, subtree = touch_and_get(tree_id)
+        tree_data, subtree = touch_and_get(tree_id)
         node_id, name = req_json()
-        tree.tree[subtree][node_id].name = name
+        tree_data.tree[subtree][node_id].name = name
         return {'message': 'ok'}
     except AssertionError as e:
         abort(400, f'cannot rename {node_id}: {e}')
@@ -555,21 +553,41 @@ def callback(tree_id):
 @put('/trees/<tree_id>/edit')
 def callback(tree_id):
     try:
-        tree, subtree = touch_and_get(tree_id)
+        tree_data, subtree = touch_and_get(tree_id)
         node_id, content = req_json()
-        node = tree.tree[subtree][node_id]
+        node = tree_data.tree[subtree][node_id]
         node.props = newick.get_props(content, is_leaf=True)
-        ops.update_sizes_all(tree.tree)
+        ops.update_sizes_all(tree_data.tree)
         return {'message': 'ok'}
     except (AssertionError, newick.NewickError) as e:
         abort(400, f'cannot edit {node_id}: {e}')
 
-@put('/trees/<tree_id>/update_props')
+@put('/trees/<tree_id>/to_dendrogram')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
+    node_id = req_json()
+    ops.to_dendrogram(tree_data.tree[subtree][node_id])
+    ops.update_sizes_all(tree_data.tree)
+    return {'message': 'ok'}
+
+@put('/trees/<tree_id>/to_ultrametric')
+def callback(tree_id):
+    tree_data, subtree = touch_and_get(tree_id)
 
     try:
-        node = tree.tree[subtree]
+        node_id = req_json()
+        ops.to_ultrametric(tree_data.tree[subtree][node_id])
+        ops.update_sizes_all(tree_data.tree)
+        return {'message': 'ok'}
+    except AssertionError as e:
+        abort(400, f'cannot convert to ultrametric {tree_id}: {e}')
+
+@put('/trees/<tree_id>/update_props')
+def callback(tree_id):
+    tree_data, subtree = touch_and_get(tree_id)
+
+    try:
+        node = tree_data.tree[subtree]
         update_node_props(node, req_json())
         return {'message': 'ok'}
     except AssertionError as e:
@@ -577,30 +595,29 @@ def callback(tree_id):
 
 @put('/trees/<tree_id>/update_nodestyle')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
     try:
-        node = tree.tree[subtree]
+        node = tree_data.tree[subtree]
         update_node_style(node, req_json().copy())
-        tree.nodestyles[node] = req_json().copy()
+        tree_data.nodestyles[node] = req_json().copy()
         return {'message': 'ok'}
     except AssertionError as e:
         abort(400, f'cannot update style of {node_id}: {e}')
 
 @put('/trees/<tree_id>/reinitialize')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    tree_data, subtree = touch_and_get(tree_id)
 
-    tree.initialized = False
+    tree_data.initialized = False
 
-    ops.maybe_convert_internal_nodes_to_support(tree.tree)
-    ops.update_sizes_all(tree.tree)
+    ops.update_sizes_all(tree_data.tree)
 
     return {'message': 'ok'}
 
 @put('/trees/<tree_id>/reload')
 def callback(tree_id):
-    tree, subtree = touch_and_get(tree_id)
+    _, subtree = touch_and_get(tree_id)
 
     if subtree:
         abort(400, 'operation not allowed with subtree')
@@ -611,51 +628,55 @@ def callback(tree_id):
 
 # Auxiliary functions.
 
-def initialize_tree_style(tree, ultrametric=False):
-    aligned_grid_dxs = deepcopy(tree.style.aligned_grid_dxs)
-    tree.style = TreeStyle()
-    tree.style.aligned_grid_dxs = aligned_grid_dxs
-    tree.style.ultrametric = ultrametric
+def initialize_tree_style(tree_data):
+    # Save aligned_grid_dxs to add them later.
+    aligned_grid_dxs = deepcopy(tree_data.style.aligned_grid_dxs)
+
+    tree_data.style = TreeStyle()
+    tree_data.style.aligned_grid_dxs = aligned_grid_dxs
 
     # Layout pre-render
-    for layouts in tree.layouts.values():
+    for layouts in tree_data.layouts.values():
         for layout in layouts:
             if layout.active:
-                layout.set_tree_style(tree.tree, tree.style)
+                layout.set_tree_style(tree_data.tree, tree_data.style)
+                # A terrible way of saying something that should be like:
+                #   tree_data.style.update(layout.tree_style)
 
-    tree.initialized = True
+    tree_data.initialized = True
 
 def load_tree(tree_id):
     "Add tree to app.trees and initialize it if not there, and return it"
     try:
         tid, subtree = get_tid(tree_id)
-        tree = app.trees[tid]
 
-        if tree.tree:
+        if tid in app.trees:
+            tree_data = app.trees[tid]
+
             # Reinitialize if layouts have to be reapplied
-            if not tree.initialized:
-                initialize_tree_style(tree)
+            if not tree_data.initialized:
+                initialize_tree_style(tree_data)
 
-                for node in tree.tree[subtree].traverse():
+                for node in tree_data.tree[subtree].traverse():
                     node.is_initialized = False
                     node._smfaces = None
                     node._collapsed_faces = None
                     node._sm_style = None
 
-                for node, args in tree.nodestyles.items():
+                for node, args in tree_data.nodestyles.items():
                     update_node_style(node, args.copy())
 
-            return tree.tree[subtree]
+            return tree_data.tree[subtree]
         else:
-            tree.name, tree.tree, tree.layouts = retrieve_tree(tid)
+            tree_data = app.trees[tid] = retrieve_tree_data(tid)
 
-            if tree.style.ultrametric:
-                tree.tree.to_ultrametric()
-                ops.update_sizes_all(tree.tree)
+            if tree_data.ultrametric:
+                tree_data.tree.to_ultrametric()
+                ops.update_sizes_all(tree_data.tree)
 
-            initialize_tree_style(tree)
+            initialize_tree_style(tree_data)
 
-            return tree.tree[subtree]
+            return tree_data.tree[subtree]
 
     except (AssertionError, IndexError):
         abort(404, f'unknown tree id {tree_id}')
@@ -664,10 +685,6 @@ def load_tree_from_newick(tid, nw):
     """Load tree into memory from newick"""
     t = Tree(nw)
 
-    if app.trees[int(tid)].style.ultrametric:
-        t.to_ultrametric()
-
-    ops.maybe_convert_internal_nodes_to_support(t)
     ops.update_sizes_all(t)
 
     return t
@@ -710,22 +727,26 @@ def retrieve_layouts(layouts):
     return dict(tree_layouts)
 
 
-def retrieve_tree(tid):
-    """Retrieve tree from file and return its name, tree structure, and layouts.
+def retrieve_tree_data(tid):
+    """Retrieve and return tree data from file.
 
     It retrieves all that from a previously saved pickle file in /tmp."""
     # Called when tree has been deleted from memory.
-    tmpfile = f'/tmp/{tid}.pickle'  # beautiful...
-    with open(tmpfile, 'rb') as handle:
-        data = pickle.load(handle)
+    try:
+        tree_data = pickle.load(open(f'/tmp/{tid}.pickle', 'rb'))
+    except (FileNotFoundError, EOFError, pickle.UnpicklingError) as e:
+        print(f'Tree {tid} cannot be recovered from disk. Loading placeholder.')
+        tree_data = TreeData()
+        tree_data.name = 'Placeholder tree'
+        tree_data.tree = Tree('(could,not,load,tree);')
+        ops.update_sizes_all(tree_data.tree)
 
-    name = data["name"]
-    tree = data["tree"]
-    layouts = retrieve_layouts(data["layouts"])
+    tree_data.style = copy_style(TreeStyle())
+    tree_data.layouts = retrieve_layouts(tree_data.layouts)
+    tree_data.active = drawer_module.get_empty_active()
+    tree_data.timer = time()  # to track if it is active
 
-    app.trees[tid].timer = time()  # to track if it is active
-
-    return name, tree, layouts
+    return tree_data
 
 
 def get_drawer(tree_id, args):
@@ -752,13 +773,13 @@ def get_drawer(tree_id, args):
 
         load_tree(tree_id)  # in case it went out of memory
         tid, _ = get_tid(tree_id)
-        tree = app.trees[tid]
+        tree_data = app.trees[tid]
 
         active_layouts = args.get('layouts')
         if active_layouts != None:
             update_layouts(active_layouts, tid)
 
-        layouts = set(ly for ly in sum(tree.layouts.values(), []) if ly.active)
+        layouts = set(ly for ly in sum(tree_data.layouts.values(), []) if ly.active)
 
         drawer_name = args.get('drawer', 'RectFaces')
         # Automatically provide aligned drawer when necessary
@@ -775,26 +796,27 @@ def get_drawer(tree_id, args):
             (get('rmin', 0), 0,
              get('amin', -180) * pi/180, get('amax', 180) * pi/180))
 
-        collapsed_ids = set(tuple(int(i) for i in node_id.split(','))
+        collapsed_ids = set(tuple(int(i) for i in node_id.split(',') if i != '')
             for node_id in json.loads(args.get('collapsed_ids', '[]')))
 
         ultrametric = args.get('ultrametric') == '1'  # asked for ultrametric?
-        if ultrametric and not tree.style.ultrametric:  # change to on
-            tree.tree.to_ultrametric()
-            ops.update_sizes_all(tree.tree)
-            initialize_tree_style(tree, ultrametric=True)
-        elif not ultrametric and tree.style.ultrametric:  # change to off
+        if ultrametric and not tree_data.ultrametric:  # change to on
+            tree_data.tree.to_ultrametric()
+            ops.update_sizes_all(tree_data.tree)
+            initialize_tree_style(tree_data)
+            tree_data.ultrametric = ultrametric
+        elif not ultrametric and tree_data.ultrametric:  # change to off
             app.trees.pop(tid, None)  # delete from memory
             # Forces it to be reloaded from disk next time it is accessed.
 
-        active = tree.active
-        selected = tree.selected
-        searches = tree.searches
+        active = tree_data.active
+        selected = tree_data.selected
+        searches = tree_data.searches
 
         return drawer_class(
             load_tree(tree_id), viewport, panel, zoom,
             limits, collapsed_ids, active, selected, searches,
-            layouts, tree.style, tree.include_props, tree.exclude_props)
+            layouts, tree_data.style, tree_data.include_props, tree_data.exclude_props)
     # bypass errors for now...
     except StopIteration as error:
         abort(400, f'not a valid drawer: {drawer_name}')
@@ -864,9 +886,9 @@ def find_node(tree, args):
 
 def get_selections(tree_id):
     tid, subtree = get_tid(tree_id)
-    tree = app.trees[tid]
-    node = tree.tree[subtree]
-    return [name for name, (results, _) in tree.selected.items() if node in results]
+    tree_data = app.trees[tid]
+    node = tree_data.tree[subtree]
+    return [name for name, (results, _) in tree_data.selected.items() if node in results]
 
 
 def update_node_props(node, args):
@@ -903,7 +925,7 @@ def update_node_style(node, args):
             node.sm_style[key] = value
 
 
-def get_nodes_info(tree, nodes, props):
+def get_nodes_info(nodes, props):
     no_props = len(props) == 1 and props[0] == ''
 
     if 'id' in props or no_props or '*' in props:
@@ -926,15 +948,15 @@ def get_nodes_info(tree, nodes, props):
     return nodes_info
 
 
-def get_selection_info(tree, args):
+def get_selection_info(tree_data, args):
     "Get selection info from their nodes"
     if 'text' not in args:
         abort(400, 'missing selection text')
     name = args.pop('text').strip()
-    nodes = tree.selected.get(name, [[]])[0]
+    nodes = tree_data.selected.get(name, [[]])[0]
 
     props = args.pop('props', '').strip().split(',')
-    return get_nodes_info(tree.tree, nodes, props)
+    return get_nodes_info(nodes, props)
 
 
 def remove_selection(tid, args):
@@ -962,14 +984,14 @@ def change_selection_name(tid, args):
 
 def unselect_node(tree_id, args):
     tid, subtree = get_tid(tree_id)
-    tree = app.trees[tid]
-    node = tree.tree[subtree]
+    tree_data = app.trees[tid]
+    node = tree_data.tree[subtree]
     name = args.pop('text', '').strip()
 
-    if name in tree.selected.keys():
-        selections = {name: tree.selected[name]}
+    if name in tree_data.selected.keys():
+        selections = {name: tree_data.selected[name]}
     else:
-        selections = dict(tree.selected)  # copy all
+        selections = dict(tree_data.selected)  # copy all
 
     removed = False
     for name, (results, parents) in selections.items():
@@ -977,11 +999,11 @@ def unselect_node(tree_id, args):
         results.discard(node)
         if len(results) == 0:
             removed = True
-            tree.selected.pop(name)
+            tree_data.selected.pop(name)
         elif nresults > len(results):
             removed = True
             parents = get_parents(results)
-            tree.selected[name] = (results, parents)
+            tree_data.selected[name] = (results, parents)
 
     return removed
 
@@ -1008,34 +1030,34 @@ def prune_by_selection(tid, args):
         abort(400, 'missing selection names')
 
     names = set(args.pop('names').strip().split(','))
-    tree = app.trees[int(tid)]
+    tree_data = app.trees[int(tid)]
 
     selected = set()
-    for name,(results,_) in tree.selected.items():
+    for name,(results,_) in tree_data.selected.items():
         if name in names:
             selected.update(results)
 
     if len(selected) == 0:
         abort(400, 'selection does not exist')
 
-    tree.tree.prune(selected)
+    tree_data.tree.prune(selected)
 
-    ops.update_sizes_all(tree.tree)
+    ops.update_sizes_all(tree_data.tree)
 
-    tree.initialized = False
+    tree_data.initialized = False
 
 
-def update_selection(tree, name, results, parents):
-    if name in tree.selected.keys():
-        all_results, all_parents = tree.selected[name]
+def update_selection(tree_data, name, results, parents):
+    if name in tree_data.selected.keys():
+        all_results, all_parents = tree_data.selected[name]
         all_results.update(results)
         for p, v in parents.items():  # update parents defaultdict
             all_parents[p] += v
-        tree.selected[name] = (all_results, all_parents)
+        tree_data.selected[name] = (all_results, all_parents)
     else:
-        tree.selected[name] = (results, parents)
+        tree_data.selected[name] = (results, parents)
 
-    results, parents = tree.selected[name]
+    results, parents = tree_data.selected[name]
     return len(results), len(parents)
 
 
@@ -1060,31 +1082,31 @@ def store_selection(tree_id, args):
         abort(400, 'missing selection text')
 
     tid, subtree = get_tid(tree_id)
-    tree = app.trees[tid]
-    node = tree.tree[subtree]
+    tree_data = app.trees[tid]
+    node = tree_data.tree[subtree]
 
     parents = get_parents([node])
 
     name = args.pop('text').strip()
-    return update_selection(tree, name, set([node]), parents)
+    return update_selection(tree_data, name, set([node]), parents)
 
 
 def activate_node(tree_id):
     tid, subtree = get_tid(tree_id)
-    tree = app.trees[int(tid)]
-    node = tree.tree[subtree]
-    tree.active.nodes.results.add(node)
-    tree.active.nodes.parents.clear()
-    tree.active.nodes.parents.update(get_parents(tree.active.nodes.results))
+    tree_data = app.trees[int(tid)]
+    node = tree_data.tree[subtree]
+    tree_data.active.nodes.results.add(node)
+    tree_data.active.nodes.parents.clear()
+    tree_data.active.nodes.parents.update(get_parents(tree_data.active.nodes.results))
 
 
 def deactivate_node(tree_id):
     tid, subtree = get_tid(tree_id)
-    tree = app.trees[tid]
-    node = tree.tree[subtree]
-    tree.active.nodes.results.discard(node)
-    tree.active.nodes.parents.clear()
-    tree.active.nodes.parents.update(get_parents(tree.active.nodes.results))
+    tree_data = app.trees[tid]
+    node = tree_data.tree[subtree]
+    tree_data.active.nodes.results.discard(node)
+    tree_data.active.nodes.parents.clear()
+    tree_data.active.nodes.parents.update(get_parents(tree_data.active.nodes.results))
 
 
 def get_active_clade(node, active):
@@ -1123,18 +1145,18 @@ def get_active_clades(results, parents):
 
 def activate_clade(tree_id):
     tid, subtree = get_tid(tree_id)
-    tree = app.trees[int(tid)]
-    node = tree.tree[subtree]
-    tree.active.clades.results.add(node)
+    tree_data = app.trees[int(tid)]
+    node = tree_data.tree[subtree]
+    tree_data.active.clades.results.add(node)
     for n in node.descendants():
-        tree.active.clades.results.discard(n)
-    results = tree.active.clades.results
+        tree_data.active.clades.results.discard(n)
+    results = tree_data.active.clades.results
     parents = get_parents(results, count_leaves=True)
     active_parents = get_active_clades(results, parents)
-    tree.active.clades.results.clear()
-    tree.active.clades.parents.clear()
-    tree.active.clades.results.update(active_parents)
-    tree.active.clades.parents.update(get_parents(active_parents, count_leaves=True))
+    tree_data.active.clades.results.clear()
+    tree_data.active.clades.parents.clear()
+    tree_data.active.clades.results.update(active_parents)
+    tree_data.active.clades.parents.update(get_parents(active_parents, count_leaves=True))
 
 
 def remove_active_clade(node, active):
@@ -1155,32 +1177,32 @@ def remove_active_clade(node, active):
 
 def deactivate_clade(tree_id):
     tid, subtree = get_tid(tree_id)
-    tree = app.trees[int(tid)]
-    node = tree.tree[subtree]
-    remove_active_clade(node, tree.active.clades.results)
-    tree.active.clades.parents.clear()
-    tree.active.clades.parents.update(get_parents(tree.active.clades.results))
+    tree_data = app.trees[int(tid)]
+    node = tree_data.tree[subtree]
+    remove_active_clade(node, tree_data.active.clades.results)
+    tree_data.active.clades.parents.clear()
+    tree_data.active.clades.parents.update(get_parents(tree_data.active.clades.results))
 
 
-def store_active(tree, idx, args):
+def store_active(tree_data, idx, args):
     if 'text' not in args:
         abort(400, 'missing selection text')
 
     name = args.pop('text').strip()
-    results = copy(tree.active[idx].results)
+    results = copy(tree_data.active[idx].results)
     if idx == 0:  # active.nodes
-        parents = copy(tree.active[idx].parents)
+        parents = copy(tree_data.active[idx].parents)
     else:         # active.clades
         parents = get_parents(results)
 
-    remove_active(tree, idx)
+    remove_active(tree_data, idx)
 
-    return update_selection(tree, name, results, parents)
+    return update_selection(tree_data, name, results, parents)
 
 
-def remove_active(tree, idx):
-    tree.active[idx].parents.clear()
-    tree.active[idx].results.clear()
+def remove_active(tree_data, idx):
+    tree_data.active[idx].parents.clear()
+    tree_data.active[idx].results.clear()
 
 
 def get_search_function(text):
@@ -1403,7 +1425,6 @@ def add_tree(data):
         tree = load_tree_from_newick(tid, nw)
     elif bpickle is not None:
         tree = ete_format.loads(bpickle, unpack=True)
-        ops.maybe_convert_internal_nodes_to_support(tree)
         ops.update_sizes_all(tree)
     else:
         tree = data.get('tree')
@@ -1413,35 +1434,36 @@ def add_tree(data):
     # TODO: Do we need to do this? (Maybe for the trees uploaded with a POST)
     # ops.update_sizes_all(t)
 
-    app_tree = app.trees[tid]
-    app_tree.name = name
-    app_tree.tree = tree
-    app_tree.layouts = retrieve_layouts(layouts)
-    app_tree.include_props = include_props
-    app_tree.exclude_props = exclude_props
+    # Initialize the tree_data.
+    tree_data = app.trees[tid] = TreeData()
+    tree_data.name = name
+    tree_data.style = copy_style(TreeStyle())
+    tree_data.nodestyles = {}
+    tree_data.include_props = include_props
+    tree_data.exclude_props = exclude_props
+    tree_data.layouts = retrieve_layouts(layouts)
+    tree_data.timer = time()
+    tree_data.searches = {}
+    tree_data.selected = {}
+    tree_data.active = drawer_module.get_empty_active()
+    tree_data.tree = tree
 
-    def write_tree():
+    def write_tree_data():
         """Write tree data as a temporary pickle file."""
-        obj = { 'name': name, 'layouts': layouts, 'tree': tree }
-        with open(f'/tmp/{tid}.pickle', 'wb') as handle:
-            pickle.dump(obj, handle)
-    thr_write = Thread(daemon=True, target=write_tree)  # so we are not delayed
+        data = deepcopy(tree_data)
+        data.style = None  # since it can't be pickled
+        data.layouts = layouts  # same
+        data.active = None  # same
+        try:
+            pickle.dump(data, open(f'/tmp/{tid}.pickle', 'wb'))
+        except (pickle.PicklingError, PermissionError) as e:
+            print(f'Tree {tid} not saved to file.')
+            # So changing to ultrametric and back will not work,
+            # because it is done by re-reading from the dumped file.
+    thr_write = Thread(daemon=True, target=write_tree_data)  # so we are not delayed
     thr_write.start()                                   # by big trees
 
-    app.trees[tid].timer = time()
-
     return tid
-
-
-def modify_tree_fields(tree_id):
-    "Modify in the database the tree fields that appear in a request"
-    tid = int(tree_id)
-
-    data = get_fields(valid_extra=[
-        'name', 'description', 'newick'])
-
-    if not data:
-        return {'message': 'ok'}
 
 
 def update_app_available_layouts():
@@ -1495,9 +1517,9 @@ def get_layouts(layouts=None):
 
 def update_layouts(active_layouts, tid):
     """ Update app layouts based on front end status """
-    tree = app.trees[int(tid)]
+    tree_data = app.trees[int(tid)]
     reinit_trees = False
-    for module, layouts in tree.layouts.items():
+    for module, layouts in tree_data.layouts.items():
         for layout in layouts:
             if not layout.always_render:
                 name = f'{module}:{layout.name}'
@@ -1508,10 +1530,10 @@ def update_layouts(active_layouts, tid):
 
     if reinit_trees:
         if app.safe_mode:
-            tree.initialized = False
+            tree_data.initialized = False
         else:
-            for t in app.trees.values():
-                t.initialized = False
+            for tree_data in app.trees.values():
+                tree_data.initialized = False
 
 
 def get_tid(tree_id):
@@ -1531,20 +1553,6 @@ def del_tree(tid):
     "Delete a tree and everywhere where it appears referenced"
     shutil.rmtree(f'/tmp/{tid}.pickle', ignore_errors=True)
     app.trees.pop(tid, None)
-
-
-def get_fields(required=None, valid_extra=None):
-    "Return fields and raise exception if missing required or invalid present"
-    data = req_json()
-
-    if required and any(x not in data for x in required):
-        abort(400, f'must have the fields {required}')
-
-    valid = (required or []) + (valid_extra or [])
-    if not all(x in valid for x in data):
-        abort(400, f'can only have the fields {valid}')
-
-    return data
 
 
 def copy_style(tree_style):
@@ -1579,19 +1587,8 @@ def initialize(tree=None, layouts=None,
     # Layouts will be accessible for each tree independently
     app.default_layouts, app.avail_layouts = get_layouts(layouts)
 
-    # Dict containing AppTree dataclasses with tree info
-    app.trees = defaultdict(lambda: AppTree(
-        name='tree',
-        style=copy_style(TreeStyle()),
-        nodestyles={},
-        include_props=deepcopy(include_props),
-        exclude_props=deepcopy(exclude_props),
-        layouts=deepcopy(app.default_layouts),
-        timer=time(),
-        searches={},
-        selected={},
-        active=drawer_module.get_empty_active(),
-    ))
+    # Dict containing TreeData dataclasses with tree info
+    app.trees = {}
 
     thread_maintenance = Thread(daemon=True, target=maintenance, args=(app,))
     thread_maintenance.start()
@@ -1602,13 +1599,29 @@ def initialize(tree=None, layouts=None,
 
 def run_smartview(tree=None, name=None, layouts=[],
                   include_props=None, exclude_props=None,
-                  safe_mode=False, host='localhost', port=5000, quiet=True,
+                  safe_mode=False, host='localhost', port=None, quiet=True,
                   compress=False, keep_server=False, open_browser=True):
+    global app
+
+    # If we try to show a tree that we already have, do not initialize again.
+    if app:
+        for tid, tree_data in app.trees.items():
+            if tree_data.tree is tree:
+                app.default_layouts, app.avail_layouts = get_layouts(layouts)
+                tree_data.layouts = retrieve_layouts([])
+                tree_data.initialized = False
+
+                if open_browser:
+                    _, listening_port = g_threads['webserver']
+                    open_browser_window(host, listening_port)
+
+                # All this is kind of a hack.
+                return
+
     # Set tree_name to None if no tree was provided
     # Generate tree_name if none was provided
     name = name or (make_name() if tree else None)
 
-    global app
     app = initialize(name, layouts,
                      include_props=include_props, exclude_props=exclude_props,
                      safe_mode=safe_mode, compress=compress)
@@ -1616,7 +1629,6 @@ def run_smartview(tree=None, name=None, layouts=[],
     # TODO: Create app.recent_trees with paths to recently viewed trees
 
     if tree:
-        ops.maybe_convert_internal_nodes_to_support(tree)
         ops.update_sizes_all(tree)
 
         tree_data = {
@@ -1630,16 +1642,34 @@ def run_smartview(tree=None, name=None, layouts=[],
         tid = add_tree(tree_data)
         print(f'Added tree {name} with id {tid}.')
 
-    if open_browser:
-        open_browser_window(host, port)
-
     if 'webserver' not in g_threads:
+        port = port or get_next_available_port()
+        assert port, 'could not find any port available'
+
         thread_webserver = Thread(
             daemon=not keep_server,  # the server persists if it's not a daemon
             target=run,
             kwargs={'quiet': quiet, 'host': host, 'port': port})
+
         thread_webserver.start()
-        g_threads['webserver'] = thread_webserver
+
+        g_threads['webserver'] = (thread_webserver, port)
+
+    if open_browser:
+        _, listening_port = g_threads['webserver']
+        open_browser_window(host, listening_port)
+
+
+def get_next_available_port(host='localhost', port_min=5000, port_max=6000):
+    """Return the next available port where we can put a server socket."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    for port in range(port_min, port_max):
+        try:
+            sock.bind((host, port))  # try to bind to the specified port
+            sock.close()
+            return port
+        except socket.error:
+            pass
 
 
 def maintenance(app, check_interval=60, max_time=30*60):
@@ -1671,7 +1701,12 @@ def make_name():
 def open_browser_window(host, port):
     """Try to open a browser window in a different process."""
     try:
-        command = {'Linux': 'xdg-open', 'Darwin': 'open'}[platform.system()]
+        system = platform.system()
+
+        host = host if host != 'localhost' or system != 'Darwin' else '127.0.0.1'
+
+        command = {'Linux': 'xdg-open', 'Darwin': 'open'}[system]
+
         Popen([command, f'http://{host}:{port}'],
               stdout=DEVNULL, stderr=DEVNULL)
     except (KeyError, FileNotFoundError) as e:
