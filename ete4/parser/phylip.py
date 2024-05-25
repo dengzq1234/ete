@@ -2,11 +2,13 @@ import os
 import re
 from sys import stderr as STDERR
 
+from ete4.core import seqgroup
+
+
 def read_phylip(source, interleaved=True, obj=None,
                 relaxed=False, fix_duplicates=True):
     if obj is None:
-        from ..coretype import SeqGroup
-        SG = SeqGroup()
+        SG = seqgroup.SeqGroup()
     else:
         SG = obj
 
@@ -30,7 +32,7 @@ def read_phylip(source, interleaved=True, obj=None,
             continue
         # Reads head
         if not nchar or not ntax:
-            m = re.match("^\s*(\d+)\s+(\d+)",line)
+            m = re.match(r"^\s*(\d+)\s+(\d+)",line)
             if m:
                 ntax  = int (m.groups()[0])
                 nchar = int (m.groups()[1])
@@ -62,7 +64,7 @@ def read_phylip(source, interleaved=True, obj=None,
                         line = m.groups()[1]
                     else:
                         raise Exception("Wrong phylip sequencial format.")
-                SG.id2seq[id_counter] += re.sub("\s","", line)
+                SG.id2seq[id_counter] += re.sub(r"\s","", line)
                 if len(SG.id2seq[id_counter]) == nchar:
                     id_counter += 1
                     name = None
@@ -77,7 +79,7 @@ def read_phylip(source, interleaved=True, obj=None,
                     if m:
                         name = m.groups()[0].strip()
 
-                        seq = re.sub("\s","",m.groups()[1])
+                        seq = re.sub(r"\s","",m.groups()[1])
                         SG.id2seq[id_counter] = seq
                         SG.id2name[id_counter] = name
                         if fix_duplicates and name in SG.name2id:
@@ -92,7 +94,7 @@ def read_phylip(source, interleaved=True, obj=None,
                     else:
                         raise Exception("Unexpected number of sequences.")
                 else:
-                    seq = re.sub("\s", "", line)
+                    seq = re.sub(r"\s", "", line)
                     if id_counter == len(SG):
                         id_counter = 0
                     SG.id2seq[id_counter] += seq

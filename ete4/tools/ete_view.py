@@ -4,8 +4,9 @@ import colorsys
 from collections import defaultdict
 
 from .common import log, POSNAMES, node_matcher, src_tree_iterator
-from .. import (Tree, PhyloTree, TextFace, RectFace, faces, TreeStyle, CircleFace, AttrFace,
-                add_face_to_node, random_color)
+from ete4 import Tree, PhyloTree
+from ete4.utils import random_color
+from ete4.treeview import TextFace, RectFace, faces, TreeStyle, CircleFace, AttrFace
 
 DESC = ""
 FACES = []
@@ -165,12 +166,12 @@ def run(args):
             #print tfile
             if args.raxml:
                 nw = re.sub(":(\d+\.\d+)\[(\d+)\]", ":\\1[&&NHX:support=\\2]", open(tfile).read())
-                t = Tree(nw, format=args.src_newick_format)
+                t = Tree(nw, parser=args.src_newick_format)
             else:
-                t = Tree(tfile, format=args.src_newick_format)
+                t = Tree(open(tfile), parser=args.src_newick_format)
 
-            print(t.get_ascii(show_internal=args.show_internal_names,
-                              attributes=args.show_attributes))
+            print(t.to_str(show_internal=args.show_internal_names,
+                           props=args.show_attributes))
         return
 
     global FACES
@@ -231,9 +232,9 @@ def run(args):
         #print tfile
         if args.raxml:
             nw = re.sub(":(\d+\.\d+)\[(\d+)\]", ":\\1[&&NHX:support=\\2]", open(tfile).read())
-            t = PhyloTree(nw, format=args.src_newick_format)
+            t = PhyloTree(nw, parser=args.src_newick_format)
         else:
-            t = PhyloTree(tfile, format=args.src_newick_format)
+            t = PhyloTree(open(tfile), parser=args.src_newick_format)
 
 
         if args.alg:
@@ -308,8 +309,8 @@ def run(args):
 
             for findex, f in enumerate(FACES):
                 if (f['nodetype'] == 'any' or
-                    (f['nodetype'] == 'leaf' and node.is_leaf()) or
-                    (f['nodetype'] == 'internal' and not node.is_leaf())):
+                    (f['nodetype'] == 'leaf' and node.is_leaf) or
+                    (f['nodetype'] == 'internal' and not node.is_leaf)):
 
 
                     # if node passes face filters
@@ -534,9 +535,9 @@ def maptrees_layout(node):
     if getattr(node, "maptrees_support", "NA") != "NA":
         f = CircleFace(radius=float(node.maptrees_support)/10, color="blue", style="sphere")
         f.opacity = 0.5
-        add_face_to_node(f, node, column=1, position="float")
-        add_face_to_node(AttrFace("maptrees_support"), node, column=1, position="branch-top")
+        node.add_face(f, column=1, position="float")
+        node.add_face(AttrFace("maptrees_support"), column=1, position="branch-top")
 
     if getattr(node, "maptrees_treeko_support", "NA") != "NA":
-        add_face_to_node(f, node, column=1, position="float")
-        add_face_to_node(AttrFace("maptrees_treeko_support"), node, column=1, position="branch-bottom")
+        node.add_face(f, column=1, position="float")
+        node.add_face(AttrFace("maptrees_treeko_support"), column=1, position="branch-bottom")

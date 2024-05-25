@@ -3,11 +3,11 @@ import signal
 
 from .qt import *
 
-from .qt4_gui import _GUI, _PropertiesDialog, _BasicNodeActions
+from .qt_gui import _GUI, _PropertiesDialog, _BasicNodeActions
 
 from . import layouts
 from .main import save
-from .qt4_render import _TreeScene, render, get_tree_img_map, init_tree_style
+from .qt_render import _TreeScene, render, get_tree_img_map, init_tree_style
 
 __all__ = ["show_tree", "render_tree"]
 
@@ -27,8 +27,8 @@ def init_scene(t, layout, ts):
     if not _QApp:
         _QApp = QApplication(["ETE"])
 
-    scene  = _TreeScene()
-	#ts._scale = None
+    scene = _TreeScene()
+
     return scene, ts
 
 def show_tree(t, layout=None, tree_style=None, win_name=None):
@@ -52,7 +52,7 @@ def show_tree(t, layout=None, tree_style=None, win_name=None):
         signal.signal(signal.SIGALRM, exit_gui)
         signal.alarm(GUI_TIMEOUT)
 
-    _QApp.exec_()
+    _QApp.exec()
 
 def render_tree(t, imgName, w=None, h=None, layout=None,
                 tree_style = None, header=None, units="px",

@@ -24,11 +24,17 @@ Its main features include:
 - Comparing trees
 - Phylogenetic functions
   - orthology detection
-  - phylogenetic distance?
+  - phylogenetic distance
 - Command line tools
   - phylogenetic reconstruction protocols
   - tree comparison
   - tree diff
+
+The official website of ETE is http://etetoolkit.org. You can find
+downloading instructions and further documentation there.
+
+News and announcements are usually posted on twitter:
+http://twitter.com/etetoolkit
 
 If you use ETE, please cite:
 
@@ -37,41 +43,69 @@ If you use ETE, please cite:
     10.1093/molbev/msw046
 
 
-# Installation and documentation
+# Installation
 
-The official website of ETE is http://etetoolkit.org. You can find
-downloading instructions and further documentation there, or in the
-next subsection specifically for ETE v4.
+## Quick way
 
-News and announcements are usually posted on twitter:
-http://twitter.com/etetoolkit
+```sh
+pip install https://github.com/etetoolkit/ete/archive/ete4.zip
+```
 
 
-## Installation of ETE v4
+## For local development
 
-To start
-- Clone this repo to local computer with `git clone
-  https://github.com/etetoolkit/ete.git` (or `git clone
-  git@github.com:etetoolkit/ete.git` if you have the right
-  permissions)
-- Change to ete4 branch `git checkout ete4`
+To install ETE in a local directory to help with the development, you can:
+
+- Clone this repository (`git clone https://github.com/etetoolkit/ete.git`)
 - Install dependecies
-  - [Cython](https://cython.org/) (you can install it through
-    [Conda](https://conda.io/) with `mamba install cython` or `conda
-    install -c conda-forge cython`)
-  - Additional dependencies: `flask flask-cors flask-httpauth
-    flask-restful flask-compress numpy PyQt5` (you can
-    install them with `pip install <list of dependencies>`)
-- Build and install ete4 from repo's root directory: `pip install -e .`
+  - If you are using [conda](https://conda.io/):
+  `conda install -c conda-forge cython bottle brotli numpy scipy`
+  - Otherwise, you can install them with `pip install <dependencies>`
+- Build and install ete4 from the repository's root directory: `pip install -e .`
 
-(In Linux there may be some cases where the gcc library must be
-installed, which can be done with `conda install -c conda-forge
-gcc_linux-64`)
+## Optional dependencies
+
+If you want to use the `treeview` module (which depends on
+[PyQt](https://www.riverbankcomputing.com/software/pyqt/)), you can
+add `[treeview]` to the pip installation.
+
+For example with `pip install -e .[treeview]` for a local editable
+installation. Or `pip install -e .[treeview,test,doc]` to also include
+the modules for testing and generating the documentation.
+
+
+# Exploring a tree
+
+To simply load a tree from a file (`my_tree.nw`) and start exploring
+it interactively, you can use the `ete4` utility and run:
+
+```sh
+ete4 explore -t my_tree.nw
+```
+
+Or start a python session and write:
+
+```py
+from ete4 import Tree
+
+t = Tree(open('my_tree.nw'))
+
+t.explore()
+```
+
+It will open a browser window with an interface to explore the tree.
+
+
+# Documentation
+
+Most documentation is automatically generated with
+[sphinx](https://www.sphinx-doc.org) from the contents of the `doc`
+directory, and is available at https://etetoolkit.github.io/ete/ .
 
 
 # Gallery of examples
 
-![](https://raw.githubusercontent.com/jhcepas/ete/master/sdoc/gallery.png)
+![](https://raw.githubusercontent.com/etetoolkit/ete/ete4/doc/images/gallery.png)
 
 
 # Getting support
@@ -96,6 +130,15 @@ first message appears after your account is validated.
 
 For any other inquiries (collaborations, sponsoring, etc), please
 contact jhcepas@gmail.com.
+
+
+# Tests
+
+You can launch some tests by running:
+
+```sh
+./run_tests.py
+```
 
 
 # Contributing and bug reporting

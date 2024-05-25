@@ -1,15 +1,16 @@
 import random
-from ... import Tree, TreeStyle, NodeStyle, faces, AttrFace, CircleFace
+from ete4 import Tree
+from ete4.treeview import TreeStyle, NodeStyle, faces, AttrFace, CircleFace
 
 def layout(node):
-    if node.is_leaf():
+    if node.is_leaf:
         # Add node name to laef nodes
         N = AttrFace("name", fsize=14, fgcolor="black")
         faces.add_face_to_node(N, node, 0)
-    if "weight" in node.features:
+    if "weight" in node.props:
         # Creates a sphere face whose size is proportional to node's
         # feature "weight"
-        C = CircleFace(radius=node.weight, color="RoyalBlue", style="sphere")
+        C = CircleFace(radius=node.props.get("weight"), color="RoyalBlue", style="sphere")
         # Let's make the sphere transparent
         C.opacity = 0.3
         # And place as a float face over the tree
@@ -18,11 +19,11 @@ def layout(node):
 def get_example_tree():
     # Random tree
     t = Tree()
-    t.populate(20, random_branches=True)
+    t.populate(20, dist_fn=random.random, support_fn=random.random)
 
     # Some random features in all nodes
     for n in t.traverse():
-        n.add_properties(weight=random.randint(0, 50))
+        n.add_props(weight=random.randint(0, 50))
 
     # Create an empty TreeStyle
     ts = TreeStyle()

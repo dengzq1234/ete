@@ -17,7 +17,7 @@ def annotate_node(t, final_task):
     cladeid2node = {}
     # Annotate cladeid in the whole tree
     for n in t.traverse():
-        if n.is_leaf():
+        if n.is_leaf:
             n.add_property("realname", db.get_seq_name(n.name))
             #n.name = n.realname
         if hasattr(n, "cladeid"):
@@ -191,7 +191,7 @@ def process_task(task, wkname, npr_conf, nodeid2info):
                             colorify(', '.join(["%s"%tax2name[x] for x in broken_clades]), "wr"))
                     target_cladeids = set()
                     for branch in broken_branches:
-                        print(branch.get_ascii(attributes=['spname', 'taxid'], compact=True))
+                        print(branch.get_ascii(properties=['spname', 'taxid'], compact=True))
                         print(["%s"%tax2name[x] for x in broken_branches[branch]])
                         target_cladeids.add(branch.cladeid)
 

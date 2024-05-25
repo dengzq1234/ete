@@ -3,9 +3,10 @@ import unittest
 
 from ete4 import PhyloTree, GTDBTaxa, ETE_DATA_HOME, update_ete_data
 from ete4.gtdb_taxonomy import gtdbquery
+import requests
 
 DATABASE_PATH = ETE_DATA_HOME + '/gtdbtaxa.sqlite'
-DEFAULT_GTDBTAXADUMP = ETE_DATA_HOME + '/gtdb202dump.tar.gz'
+DEFAULT_GTDBTAXADUMP = ETE_DATA_HOME + '/gtdbdump.tar.gz'
 
 
 class Test_gtdbquery(unittest.TestCase):
@@ -13,10 +14,14 @@ class Test_gtdbquery(unittest.TestCase):
     def test_00_update_database(self):
         gtdb = GTDBTaxa()
 
-        if not os.path.exists(DEFAULT_GTDBTAXADUMP):
-            url = ('https://github.com/etetoolkit/ete-data/raw/main'
+        url = ('https://github.com/etetoolkit/ete-data/raw/main'
                    '/gtdb_taxonomy/gtdb202/gtdb202dump.tar.gz')
-            update_ete_data(DEFAULT_GTDBTAXADUMP, url)
+
+        print(f'Downloading GTDB database release 202 to {DEFAULT_GTDBTAXADUMP} from {url}')
+
+        with open(DEFAULT_GTDBTAXADUMP, 'wb') as f:
+            f.write(requests.get(url).content)
+
         gtdb.update_taxonomy_database(DEFAULT_GTDBTAXADUMP)
 
         if not os.path.exists(DATABASE_PATH):
@@ -29,20 +34,105 @@ class Test_gtdbquery(unittest.TestCase):
 
         self.assertEqual(tree.props.get('sci_name'), 'd__Bacteria')
 
-        firmicutes = (tree&'c__Bacilli').up
+        firmicutes = tree['c__Bacilli'].up
         self.assertEqual(firmicutes.props.get('taxid'), 'p__Firmicutes')
         self.assertEqual(firmicutes.props.get('sci_name'), 'p__Firmicutes')
         self.assertEqual(firmicutes.props.get('rank'), 'phylum')
         self.assertEqual(firmicutes.props.get('named_lineage'),
                          ['root', 'd__Bacteria', 'p__Firmicutes'])
 
-        caballeronia = tree&'s__Caballeronia udeis'
+        caballeronia = tree['s__Caballeronia udeis']
         self.assertEqual(caballeronia.props.get('taxid'), 's__Caballeronia udeis')
         self.assertEqual(caballeronia.props.get('sci_name'), 's__Caballeronia udeis')
         self.assertEqual(caballeronia.props.get('rank'), 'species')
         self.assertEqual(caballeronia.props.get('named_lineage'),
                          ['root', 'd__Bacteria', 'p__Proteobacteria', 'c__Gammaproteobacteria',
                           'o__Burkholderiales', 'f__Burkholderiaceae', 'g__Caballeronia', 's__Caballeronia udeis'])
+    
+    def test_02tree_annotation(self):
+        # using name as species attribute
+        tree = PhyloTree('((GB_GCA_011358815.1,RS_GCF_003948265.1),(GB_GCA_003344655.1),(GB_GCA_011056255.1));',
+                         sp_naming_function=lambda name: name)
+        tree.annotate_gtdb_taxa(dbfile=DATABASE_PATH, taxid_attr='species')
+
+        self.assertEqual(tree.props.get('sci_name'), 'g__Korarchaeum')
+        
+        cryptofilum = tree['GB_GCA_011358815.1'].up
+        self.assertEqual(cryptofilum.props.get('taxid'), 's__Korarchaeum cryptofilum')
+        self.assertEqual(cryptofilum.props.get('sci_name'), 's__Korarchaeum cryptofilum')
+        self.assertEqual(cryptofilum.props.get('rank'), 'species')
+        self.assertEqual(cryptofilum.props.get('named_lineage'),
+                            ['root', 'd__Archaea', 'p__Thermoproteota', 'c__Korarchaeia', 
+                            'o__Korarchaeales', 'f__Korarchaeaceae', 'g__Korarchaeum', 's__Korarchaeum cryptofilum'])
+
+        sp003344655 = tree['GB_GCA_003344655.1']
+        self.assertEqual(sp003344655.props.get('taxid'), 'GB_GCA_003344655.1')
+        self.assertEqual(sp003344655.props.get('sci_name'), 's__Korarchaeum sp003344655')
+        self.assertEqual(sp003344655.props.get('rank'), 'subspecies')
+        self.assertEqual(sp003344655.props.get('named_lineage'),
+                            ['root', 'd__Archaea', 'p__Thermoproteota', 'c__Korarchaeia', 
+                            'o__Korarchaeales', 'f__Korarchaeaceae', 'g__Korarchaeum',
+                            's__Korarchaeum sp003344655', 'GB_GCA_003344655.1'])
+    
+    def test_03tree_annotation(self):
+        # assign species attribute via sp_naming_function
+        tree = PhyloTree('((GB_GCA_011358815.1|protA,RS_GCF_003948265.1|protB),(GB_GCA_003344655.1|protC),(GB_GCA_011056255.1|protD));',
+                         sp_naming_function=lambda name: name.split('|')[0])
+        tree.annotate_gtdb_taxa(taxid_attr='species')
+
+        self.assertEqual(tree.props.get('sci_name'), 'g__Korarchaeum')
+        
+        cryptofilum = tree['GB_GCA_011358815.1|protA'].up
+        self.assertEqual(cryptofilum.props.get('taxid'), 's__Korarchaeum cryptofilum')
+        self.assertEqual(cryptofilum.props.get('sci_name'), 's__Korarchaeum cryptofilum')
+        self.assertEqual(cryptofilum.props.get('rank'), 'species')
+        self.assertEqual(cryptofilum.props.get('named_lineage'),
+                            ['root', 'd__Archaea', 'p__Thermoproteota', 'c__Korarchaeia', 
+                            'o__Korarchaeales', 'f__Korarchaeaceae', 'g__Korarchaeum', 's__Korarchaeum cryptofilum'])
+
+        sp003344655 = tree['GB_GCA_003344655.1|protC']
+        self.assertEqual(sp003344655.props.get('taxid'), 'GB_GCA_003344655.1')
+        self.assertEqual(sp003344655.props.get('sci_name'), 's__Korarchaeum sp003344655')
+        self.assertEqual(sp003344655.props.get('rank'), 'subspecies')
+        self.assertEqual(sp003344655.props.get('named_lineage'),
+                            ['root', 'd__Archaea', 'p__Thermoproteota', 'c__Korarchaeia', 
+                            'o__Korarchaeales', 'f__Korarchaeaceae', 'g__Korarchaeum',
+                            's__Korarchaeum sp003344655', 'GB_GCA_003344655.1'])
+
+    def test_04tree_annotation(self):
+        # Using custom property as taxonomic identifier 
+        tree = PhyloTree('((protA:1, protB:1):1,(protC:1),(protD:1):1):1;')
+        annotate_dict = {
+            'protA': 'GB_GCA_011358815.1',
+            'protB': 'RS_GCF_003948265.1',
+            'protC': 'GB_GCA_003344655.1',
+            'protD': 'GB_GCA_011056255.1',
+        }
+        for key, value in annotate_dict.items():
+            tree[key].add_prop('gtdb_spcode', value)
+
+        tree.annotate_gtdb_taxa(taxid_attr="gtdb_spcode")
+
+        self.assertEqual(tree.props.get('sci_name'), 'g__Korarchaeum')
+        
+        cryptofilum = tree['protA'].up
+        self.assertEqual(cryptofilum.props.get('taxid'), 's__Korarchaeum cryptofilum')
+        self.assertEqual(cryptofilum.props.get('sci_name'), 's__Korarchaeum cryptofilum')
+        self.assertEqual(cryptofilum.props.get('rank'), 'species')
+        self.assertEqual(cryptofilum.props.get('named_lineage'),
+                            ['root', 'd__Archaea', 'p__Thermoproteota', 'c__Korarchaeia', 
+                            'o__Korarchaeales', 'f__Korarchaeaceae', 'g__Korarchaeum', 's__Korarchaeum cryptofilum'])
+
+        sp003344655 = tree['protC']
+        self.assertEqual(sp003344655.props.get('taxid'), 'GB_GCA_003344655.1')
+        self.assertEqual(sp003344655.props.get('sci_name'), 's__Korarchaeum sp003344655')
+        self.assertEqual(sp003344655.props.get('rank'), 'subspecies')
+        self.assertEqual(sp003344655.props.get('named_lineage'),
+                            ['root', 'd__Archaea', 'p__Thermoproteota', 'c__Korarchaeia', 
+                            'o__Korarchaeales', 'f__Korarchaeaceae', 'g__Korarchaeum',
+                            's__Korarchaeum sp003344655', 'GB_GCA_003344655.1'])
+
+
 
     def test_gtdbquery(self):
         gtdb = GTDBTaxa(dbfile=DATABASE_PATH)
@@ -63,7 +153,7 @@ class Test_gtdbquery(unittest.TestCase):
         gtdb = GTDBTaxa(dbfile=DATABASE_PATH)
         tree = gtdb.get_topology(['p__Huberarchaeota', 'o__Peptococcales', 'f__Korarchaeaceae', 's__Korarchaeum'],
                                  intermediate_nodes=True, collapse_subspecies=True, annotate=True)
-        self.assertEqual(sorted(tree.get_leaf_names()),
+        self.assertEqual(sorted(tree.leaf_names()),
                          ['f__Korarchaeaceae', 'o__Peptococcales', 'p__Huberarchaeota'])
 
     def test_name_lineages(self):

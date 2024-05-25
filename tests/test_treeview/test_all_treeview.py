@@ -1,21 +1,29 @@
 import unittest
-import random
 import sys
 import os
+import random
 
 ETEPATH = os.path.abspath(os.path.split(os.path.realpath(__file__))[0]+'/../')
 sys.path.insert(0, ETEPATH)
 
-from ... import Tree, TreeStyle, NodeStyle, PhyloTree, faces, random_color
-from ...treeview.faces import *
-from ...treeview.main import _NODE_TYPE_CHECKER, FACE_POSITIONS
+from ete4 import Tree, PhyloTree
+from ete4.treeview import TreeStyle, NodeStyle
+from ete4.treeview import faces
+from ete4.treeview.faces import *
+from ete4.treeview.main import _NODE_TYPE_CHECKER, FACE_POSITIONS
 
-from . import (face_grid, bubble_map, item_faces, node_style, node_background,
-               face_positions, face_rotation, seq_motif_faces,
-               barchart_and_piechart_faces, phylotree_visualization)
+try:  # when we run the script directly
+    import face_grid, bubble_map, item_faces, node_style, node_background, \
+        face_positions, face_rotation, seq_motif_faces, \
+        barchart_and_piechart_faces, phylotree_visualization
+except ImportError:  # when run with unittest or pytest
+    from . import face_grid, bubble_map, item_faces, node_style, \
+        node_background, face_positions, face_rotation, seq_motif_faces, \
+        barchart_and_piechart_faces, phylotree_visualization
+
 
 CONT = 0
-class Test_Coretype_Treeview(unittest.TestCase):
+class Test_Core_Treeview(unittest.TestCase):
     """ Tests tree basics. """
     def test_renderer(self):
 
@@ -31,6 +39,7 @@ class Test_Coretype_Treeview(unittest.TestCase):
         t_bubble = TreeFace(t, ts)
         n = main_tree.add_child()
         n.add_face(t_bubble, 0, "aligned")
+        t.show()
 
         t, ts = item_faces.get_example_tree()
         t_items = TreeFace(t, ts)
@@ -126,7 +135,7 @@ class Test_Coretype_Treeview(unittest.TestCase):
             global CONT
             if CONT >= len(chars):
                 CONT = 0
-            if node.is_leaf():
+            if node.is_leaf:
                 node.img_style["size"] = 0
                 F2= AttrFace("name", tight_text=True)
                 F= TextFace(chars[CONT], tight_text=True)
@@ -136,7 +145,7 @@ class Test_Coretype_Treeview(unittest.TestCase):
                 faces.add_face_to_node(F2 ,node, 1, position="branch-right")
                 CONT += 1
         t = Tree()
-        t.populate(20, random_branches=True)
+        t.populate(20, dist_fn=random.random, support_fn=random.random)
         ts = TreeStyle()
         ts.layout_fn = layout
         ts.mode = "c"

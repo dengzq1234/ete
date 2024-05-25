@@ -1,13 +1,15 @@
-from ... import Tree, TreeStyle, add_face_to_node, TextFace
-
 from random import randint
 
+from ete4 import Tree
+from ete4.treeview import TreeStyle, add_face_to_node, TextFace
+
+
 def rotation_layout(node):
-    if node.is_leaf():
+    if node.is_leaf:
         F = TextFace(node.name, tight_text=True)
         F.rotation = randint(0, 360)
-        add_face_to_node(TextFace("third" ), node, column=8, position="branch-right")
-        add_face_to_node(TextFace("second" ), node, column=2, position="branch-right")
+        add_face_to_node(TextFace("third"), node, column=8, position="branch-right")
+        add_face_to_node(TextFace("second"), node, column=2, position="branch-right")
         add_face_to_node(F, node, column=0, position="branch-right")
 
         F.border.width = 1
@@ -26,5 +28,3 @@ def get_example_tree():
 if __name__ == "__main__":
     t, ts = get_example_tree()
     t.show(tree_style=ts)
-
-

@@ -2,11 +2,12 @@
 import colorsys
 import random
 
-from ... import Tree, faces, TreeStyle, NodeStyle, Face
+from ete4 import Tree
+from ete4.treeview import faces, TreeStyle, NodeStyle, Face
 
 # We will need to create Qt4 items
-from ...treeview.qt import QtCore, Qt
-from ...treeview.qt import QGraphicsRectItem, QGraphicsSimpleTextItem, \
+from ete4.treeview.qt import QtCore, Qt
+from ete4.treeview.qt import QGraphicsRectItem, QGraphicsSimpleTextItem, \
     QGraphicsEllipseItem, QColor, QPen, QBrush
 
 class InteractiveItem(QGraphicsRectItem):
@@ -14,7 +15,7 @@ class InteractiveItem(QGraphicsRectItem):
         QGraphicsRectItem.__init__(self, *arg, **karg)
         self.node = None
         self.label = None
-        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
 
     def hoverEnterEvent (self, e):
         # There are many ways of adding interactive elements. With the
@@ -70,12 +71,12 @@ def ugly_name_face(node, *args, **kargs):
 
     masterItem = InteractiveItem(0, 0, width, height)
     masterItem.setAcceptHoverEvents(True)
-    
+
     # Keep a link within the item to access node info
     masterItem.node = node
 
     # I dont want a border around the masterItem
-    masterItem.setPen(QPen(QtCore.Qt.NoPen))
+    masterItem.setPen(QPen(QtCore.Qt.PenStyle.NoPen))
 
     # Add ellipse around text
     ellipse = QGraphicsEllipseItem(masterItem.rect())
@@ -97,7 +98,7 @@ def ugly_name_face(node, *args, **kargs):
     return masterItem
 
 def master_ly(node):
-    if node.is_leaf():
+    if node.is_leaf:
         # Create an ItemFAce. First argument must be the pointer to
         # the constructor function that returns a QGraphicsItem. It
         # will be used to draw the Face. Next arguments are arbitrary,
@@ -108,7 +109,7 @@ def master_ly(node):
 def get_example_tree():
 
     t = Tree()
-    t.populate(8, reuse_names=False)
+    t.populate(8)
 
     ts = TreeStyle()
     ts.layout_fn = master_ly

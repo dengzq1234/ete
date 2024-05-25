@@ -3,17 +3,15 @@ from collections import defaultdict
 
 
 from .faces import SelectedRectFace
-from .face_positions import FACE_POSITIONS, _HeaderFaceContainer
+from .face_positions import FACE_POSITIONS, AlignedGrid
 from ..utils import InvalidUsage
 from .nodestyle import NodeStyle
 
 
-class TreeStyle(object):
+class TreeStyle:
     def __init__(self):
         self.aligned_grid = True
         self.aligned_grid_dxs = defaultdict(lambda: 0)
-
-        self.ultrametric = False
 
         self.collapse_size = 10
 
@@ -26,8 +24,8 @@ class TreeStyle(object):
         self._active_face_pos = "branch_right"
 
         # Aligned panel headers
-        self._aligned_panel_header = _HeaderFaceContainer()
-        self._aligned_panel_footer = _HeaderFaceContainer()
+        self._aligned_panel_header = AlignedGrid()
+        self._aligned_panel_footer = AlignedGrid()
 
         self._legend = []
 
@@ -52,7 +50,7 @@ class TreeStyle(object):
             self._selected_face_pos = pos
         else:
             raise ValueError(f'{pos} is not a valid Face position. ' +
-                    'Please provide one of the following values' + 
+                    'Please provide one of the following values' +
                     ', '.join(FACE_POSITIONS + '.'))
 
     @property
@@ -76,7 +74,7 @@ class TreeStyle(object):
             self._active_face_pos = pos
         else:
             raise ValueError(f'{pos} is not a valid Face position. ' +
-                    'Please provide one of the following values' + 
+                    'Please provide one of the following values' +
                     ', '.join(FACE_POSITIONS + '.'))
 
     @property
@@ -107,7 +105,7 @@ class TreeStyle(object):
             entry["colormap"] = colormap
 
         elif variable == "continuous" and value_range and color_range:
-            entry = { **entry, "value_range": value_range, 
+            entry = { **entry, "value_range": value_range,
                       "color_range": color_range }
         else:
             return

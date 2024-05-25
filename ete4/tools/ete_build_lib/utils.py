@@ -60,7 +60,7 @@ GLOBALS = {
                          # used them within the same get_status cycle
 }
 
-class _DataTypes(object):
+class _DataTypes:
     def __init__(self):
         self.msf = 100
         self.alg_fasta = 200
@@ -94,10 +94,10 @@ from collections import OrderedDict
 
 # ete3 should be added to the python path by the npr script
 from ...phylo import PhyloTree
-from ...coretype.tree import Tree
-from ...coretype.seqgroup import SeqGroup
+from ete4.core.tree import Tree
+from ete4.core.seqgroup import SeqGroup
 from ...parser.fasta import read_fasta
-from ...coretype import tree
+from ete4.core import tree
 from ...ncbi_taxonomy import ncbiquery as ncbi
 
 # This default values in trees are Very important for outgroup
@@ -188,7 +188,7 @@ def merge_arg_dicts(source, target, parent=""):
     return target
 
 def load_node_size(n):
-    if n.is_leaf():
+    if n.is_leaf:
         size = 1
     else:
         size = 0
@@ -496,7 +496,7 @@ def get_latest_nprdp(basedir):
     return None
 
 def npr_layout(node):
-    if node.is_leaf():
+    if node.is_leaf:
         name = faces.AttrFace("name", fsize=12)
         faces.add_face_to_node(name, node, 0, position="branch-right")
         if hasattr(node, "sequence"):
@@ -543,7 +543,7 @@ def npr_layout(node):
 
 try:
     from ... import TreeStyle, NodeStyle, faces
-    from ...treeview import random_color
+    from ...utils import random_color
     NPR_TREE_STYLE = TreeStyle()
     NPR_TREE_STYLE.layout_fn = npr_layout
     NPR_TREE_STYLE.show_leaf_name = False

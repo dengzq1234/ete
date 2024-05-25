@@ -325,7 +325,7 @@ def select_closest_outgroup(target, n2content, splitterconf):
 
     # Gets a list of outside nodes an their distance to current target node
     n2targetdist = distance_matrix_new(target, leaf_only=False,
-                                               topology_only=out_topodist)
+                                               topological=out_topodist)
 
     valid_nodes = sorted([(node, ndist) for node, ndist in n2targetdist.items()
                           if not(n2content[node] & n2content[target])
@@ -349,8 +349,6 @@ def select_closest_outgroup(target, n2content, splitterconf):
                       best_outgroup.children]))
 
     log.log(24, "best outgroup topology:\n%s", best_outgroup)
-    #print target
-    #print target.get_tree_root()
 
     seqs = [n.name for n in n2content[target]]
     outs = [n.name for n in n2content[best_outgroup]]
@@ -389,7 +387,7 @@ def select_sister_outgroup(target, n2content, splitterconf):
 
     # Gets a list of outside nodes an their distance to current target node
     n2targetdist = distance_matrix_new(target, leaf_only=False,
-                                               topology_only=out_topodist)
+                                               topological=out_topodist)
 
     sister_content = n2content[target.get_sisters()[0]]
 
@@ -416,8 +414,6 @@ def select_sister_outgroup(target, n2content, splitterconf):
                       best_outgroup.children]))
 
     log.log(24, "best outgroup topology:\n%s", best_outgroup)
-    #print target
-    #print target.get_tree_root()
 
     seqs = [n.name for n in n2content[target]]
     outs = [n.name for n in n2content[best_outgroup]]
@@ -452,10 +448,10 @@ def select_outgroups(target, n2content, splitterconf):
 
     # Gets a list of outside nodes an their distance to current target node
     n2targetdist = distance_matrix_new(target, leaf_only=False,
-                                               topology_only=out_topodist)
+                                               topological=out_topodist)
 
     #kk, test = distance_matrix(target, leaf_only=False,
-    #                       topology_only=False)
+    #                       topological=False)
 
     #for x in test:
     #    if test[x] != n2targetdist[x]:
@@ -487,7 +483,6 @@ def select_outgroups(target, n2content, splitterconf):
             v = cmp(x.cladeid, y.cladeid)
         return v
 
-    #del n2targetdist[target.get_tree_root()]
     max_dist = max(n2targetdist.values())
     valid_nodes = [n for n in n2targetdist if \
                        not n2content[n] & n2content[target] and
@@ -509,7 +504,7 @@ def select_outgroups(target, n2content, splitterconf):
                       best_outgroup.children]))
 
     if DEBUG():
-        root = target.get_tree_root()
+        root = target.root
         for _seq in outs:
             tar =  root & _seq
             tar.img_style["fgcolor"]="green"
@@ -526,19 +521,19 @@ def select_outgroups(target, n2content, splitterconf):
 
     return set(seqs), set(outs)
 
-def distance_matrix_new(target, leaf_only=False, topology_only=False):
-    t = target.get_tree_root()
+def distance_matrix_new(target, leaf_only=False, topological=False):
+    t = target.root
     real_outgroup = t.children[0]
     t.set_outgroup(target)
 
     n2dist = {target:0}
     for n in target.get_descendants("preorder"):
-        n2dist[n] = n2dist[n.up] + (topology_only or n.dist)
+        n2dist[n] = n2dist[n.up] + (topological or n.dist)
 
     sister = target.get_sisters()[0]
-    n2dist[sister] = (topology_only or sister.dist)+ (topology_only or target.dist)
+    n2dist[sister] = (topological or sister.dist)+ (topological or target.dist)
     for n in sister.get_descendants("preorder"):
-        n2dist[n] = n2dist[n.up] + (topology_only or n.dist)
+        n2dist[n] = n2dist[n.up] + (topological or n.dist)
 
     t.set_outgroup(real_outgroup)
 

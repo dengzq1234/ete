@@ -69,7 +69,7 @@ class Model:
         str_mark = ''
         str_line = '\n        mark:%-5s, omega: %-10s, node_ids: %-4s, name: %s'
         for i, node in enumerate(self._tree.traverse()):
-            if node.is_root():
+            if node.is_root:
                 str_mark += str_line % (self.branches[node.props.get('node_id')]['mark'],
                                         'None',
                                         node.props.get('node_id'), node.name or 'ROOT')
@@ -106,9 +106,8 @@ class Model:
         checks if tree is marked and if model allows marks.
         fill up branches dict with marks
         """
-        has_mark = any(n.props.get('mark') for n in self._tree.iter_descendants())
+        has_mark = any(n.props.get('mark') for n in self._tree.descendants())
         for i, node in enumerate(self._tree.traverse()):
-            #if node.is_root(): continue
             if has_mark and self.properties['allow_mark']:
                 self.branches[node.props.get('node_id')] = {'mark': node.props.get('mark') or ' #0'}
             elif 'branch' in self.properties['typ']:
@@ -178,8 +177,7 @@ class Model:
         if not 'ylim' in kwargs:
             kwargs['ylim'] = (0, 2)
         if errors:
-            errors = self.sites[val]['se'] if 'se' in self.sites[val]\
-                     else None
+            errors = self.sites[val].get('se', None)
         if TREEVIEW:
             try:
                 hist = SequencePlotFace(self.sites[val]['w'], hlines=hlines,
@@ -297,7 +295,7 @@ class Model:
                                     self.sites[val]['class']):
             if pval < 0.95:
                 categories.append('NS')
-            elif curr_class != self.n_classes[val] and not ps_model:
+            elif curr_class == self.n_classes[val] and not ps_model:
                 if pval < 0.99:
                     categories.append('RX')
                 else:
@@ -326,8 +324,8 @@ def check_name(model):
     '''
     check that model name corresponds to one of the available
     '''
-    if sub('\..*', '', model) in AVAIL:
-        return model, AVAIL [sub('\..*', '', model)]
+    if sub(r'\..*', '', model) in AVAIL:
+        return model, AVAIL [sub(r'\..*', '', model)]
 
 
 

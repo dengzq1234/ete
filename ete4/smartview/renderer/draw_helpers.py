@@ -2,7 +2,6 @@ from collections import OrderedDict, namedtuple
 from math import sin, cos, pi, sqrt, atan2
 
 Box = namedtuple('Box', 'x y dx dy')  # corner and size of a 2D shape
-SBox = namedtuple('SBox', 'x y dx_min dx_max dy')  # slanted box
 
 Padding = namedtuple('Padding', 'x y')
 
@@ -18,11 +17,6 @@ def cartesian(point):
     return r * cos(a), r * sin(a)
 
 
-def is_good_angle_interval(a1, a2):
-    EPSILON = 1e-8  # without it, rounding can fake a2 > pi
-    return -pi <= a1 < a2 < pi + EPSILON
-
-
 def summary(nodes, prop="name"):
     "Return a list of names summarizing the given list of nodes"
     return list(OrderedDict((first_value(node, prop), None) for node in nodes).keys())
@@ -30,7 +24,8 @@ def summary(nodes, prop="name"):
 
 def first_value(tree, prop):
     "Return the value of the requested property for the first node that has it"
-    return next((node.props.get(prop) for node in tree.traverse('preorder') if node.props.get(prop)), '')
+    return next((node.props.get(prop) for node in tree.traverse('preorder')
+                 if node.props.get(prop)), '')
 
 
 def get_xs(box):
@@ -122,8 +117,8 @@ def draw_nodebox(box, name='', properties=None,
             properties, node_id or [],
             searched_by or [], style or {}]
 
-def draw_outline(sbox, style=None):
-    return ['outline', sbox, style or {}]
+def draw_outline(box, style=None):
+    return ['outline', box, style or {}]
 
 def get_line_type(style):
     types = ['solid', 'dotted', 'dashed']
@@ -194,8 +189,8 @@ def draw_arrow(box, tip, orientation='right', arrow_type='',
                  (x + tip, y + dy))
     return ['polygon', arrow, arrow_type, style or {}, tooltip or '']
 
-def draw_array(box, a):
-    return ['array', box, a]
+def draw_array(box, a, tooltip=None):
+    return ['array', box, a, tooltip or '']
 
 def draw_html(box, html, html_type='', style=None):
     return ['html', box, html, html_type, style or {}]

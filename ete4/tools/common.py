@@ -2,13 +2,8 @@ import sys
 import operator
 import re
 
-__CITATION__ = '''#       ** If you use this software for a published work, please cite: **
-#
-# Jaime Huerta-Cepas, Joaquin Dopazo and Toni Gabaldon. ETE: a python Environment
-# for Tree Exploration. BMC Bioinformatics 2010, 11:24. doi: 10.1186/1471-2105-11-24.'''
-
-
 LOG_LEVEL = 2
+
 
 class ArgError(ValueError):
     def __init__(self, value):
@@ -19,7 +14,7 @@ class ArgError(ValueError):
     pass
 
 
-class Logger(object):
+class Logger:
     def __init__(self, buff):
         self.out = buff
 
@@ -123,7 +118,7 @@ def dump(t, properties=None):
     #if getattr(args, "output", None):
     #    t.write(format=0, features=features)
     #else:
-    print(t.write(format=0, properties=properties))
+    print(t.write(parser=0, props=properties))
 
 def populate_main_args(main_args_p):
     main_args = main_args_p.add_argument_group('GENERAL OPTIONS')
@@ -150,8 +145,7 @@ def populate_source_args(source_args_p):
 
     source_args.add_argument("-t", dest='src_trees',
                              type=str, nargs="*",
-                             help=("a list of trees in newick format (filenames or"
-                             " quoted strings)"))
+                             help=("a list of files with trees in newick format"))
 
     source_args.add_argument("--src_tree_list", dest="src_tree_list",
                              type=str,
@@ -172,8 +166,7 @@ def populate_ref_args(ref_args_p):
 
     ref_args.add_argument("-r", dest="ref_trees",
                            type=str, nargs="*",
-                           help=("One or more reference trees in newick format (filename"
-                                 " or quoted string"))
+                           help=("Files with reference trees in newick format"))
 
     ref_args.add_argument("--ref_tree_list", dest="ref_tree_list",
                              type=str,

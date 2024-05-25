@@ -8,9 +8,9 @@ for leaf in tree.get_leaves():
 # number of leaves that it contains.
 print "Labeled tree:"
 for node in tree.get_descendants():
-    if node.is_leaf():
-        node.add_features(ntype="terminal")
+    if node.is_leaf:
+        node.add_props(ntype="terminal")
     else:
-        node.add_features(ntype="internal", size=len(node))
+        node.add_props(ntype="internal", size=len(node))
 # Gets the extended newick of the tree including new node features
 print tree.write(features=[])

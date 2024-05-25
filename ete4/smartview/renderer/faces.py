@@ -52,6 +52,13 @@ _ntcolors = {
     ' ':"#FFFFFF"
     }
 
+__all__ = [
+    'Face', 'TextFace', 'AttrFace', 'CircleFace', 'RectFace',
+    'ArrowFace', 'SelectedFace', 'SelectedCircleFace',
+    'SelectedRectFace', 'OutlineFace', 'AlignLinkFace', 'SeqFace',
+    'SeqMotifFace', 'AlignmentFace', 'ScaleFace', 'PieChartFace',
+    'HTMLFace', 'ImgFace', 'LegendFace', 'StackedBarFace']
+
 
 def clean_text(text):
     return re.sub(r'[^A-Za-z0-9_-]', '',  text)
@@ -74,7 +81,13 @@ def stringify(content):
     return str(content)
 
 
-class Face(object):
+class Face:
+    """
+    Base class for faces.
+
+    Ete uses "faces" to show some piece of information from
+    a node in a tree (as text or graphics of many kinds).
+    """
 
     def __init__(self, name="", padding_x=0, padding_y=0):
         self.node = None
@@ -142,7 +155,7 @@ class Face(object):
 
         elif pos == 'branch_right':  # right of node
             avail_dx = dx_to_closest_child / n_col\
-                    if not (self.node.is_leaf() or self.node.is_collapsed)\
+                    if not (self.node.is_leaf or self.node.is_collapsed)\
                     else None
             avail_dy = min([bdy, dy - bdy, bdy - bdy0, bdy1 - bdy]) * 2 / n_row
             x = x + bdx + dx_before
@@ -326,8 +339,8 @@ class AttrFace(TextFace):
             raise Exception(f'An associated **node** must be provided to compute **content**.')
 
     def get_content(self):
-        content = str(getattr(self.node, self._attr, None)\
-                or self.node.props.get(self._attr))
+        content = str(getattr(self.node, self._attr, None)
+                      or self.node.props.get(self._attr))
         self._content = self.formatter % content if self.formatter else content
         return self._content
 
@@ -429,7 +442,7 @@ class RectFace(Face):
             ftype='sans-serif',
             tooltip=None,
             name="",
-            padding_x=0, padding_y=0):
+            padding_x=0, padding_y=0, stroke_color=None, stroke_width=0):
 
         Face.__init__(self, name=name, padding_x=padding_x, padding_y=padding_y)
 
@@ -445,6 +458,8 @@ class RectFace(Face):
         self.ftype = ftype
         self.min_fsize = min_fsize
         self.max_fsize = max_fsize
+        self.stroke_color = stroke_color
+        self.stroke_width = stroke_width
 
         self.tooltip = tooltip
 
@@ -546,7 +561,12 @@ class RectFace(Face):
         self._check_own_variables()
 
         circ_drawer = drawer.TYPE == 'circ'
-        style = {'fill': self.color, 'opacity': self.opacity}
+        style = {
+            'fill': self.color,
+            'opacity': self.opacity,
+            'stroke': self.stroke_color,
+            'stroke-width': self.stroke_width
+            }
         if self.text and circ_drawer:
             rect_id = get_random_string(10)
             style['id'] = rect_id
@@ -756,21 +776,21 @@ class OutlineFace(Face):
             dx_before, dy_before):
 
         self.outline = drawer.outline if drawer.outline \
-            and len(drawer.outline) == 5 else SBox(0, 0, 0, 0, 0)
+            and len(drawer.outline) == 4 else Box(0, 0, 0, 0)
 
         self.zoom = drawer.zoom[0], drawer.zoom[1]
 
         if drawer.TYPE == 'circ':
-            r, a, dr_min, dr_max, da = self.outline
+            r, a, dr, da = self.outline
             a1, a2 = clip_angles(a, a + da)
-            self.outline = SBox(r, a1, dr_min, dr_max, a2 - a1)
+            self.outline = Box(r, a1, dr, a2 - a1)
 
         return self.get_box()
 
     def get_box(self):
-        if self.outline and len(self.outline) == 5:
-            x, y, dx_min, dx_max, dy = self.outline
-            return Box(x, y, dx_max, dy)
+        if self.outline and len(self.outline) == 4:
+            x, y, dx, dy = self.outline
+            return Box(x, y, dx, dy)
         return Box(0, 0, 0, 0)
 
     def fits(self):
@@ -784,14 +804,14 @@ class OutlineFace(Face):
                 'fill': nodestyle["outline_color"],
                 'fill-opacity': nodestyle["outline_opacity"],
                 }
-        x, y, dx_min, dx_max, dy = self.outline
+        x, y, dx, dy = self.outline
         zx, zy = self.zoom
         circ_drawer = drawer.TYPE == 'circ'
         r = (x or 1e-10) if circ_drawer else 1
         if dy * zy * r < self.collapsing_height:
             # Convert to line if height less than one pixel
             p1 = (x, y + dy / 2)
-            p2 = (x + dx_max, y + dy / 2)
+            p2 = (x + dx, y + dy / 2)
             if circ_drawer:
                 p1 = cartesian(p1)
                 p2 = cartesian(p2)
@@ -868,7 +888,7 @@ class AlignLinkFace(Face):
                 'opacity': self.opacity,
                 }
         if drawer.panel == 0 and drawer.viewport and\
-          (self.node.is_leaf() or self.node.is_collapsed)\
+          (self.node.is_leaf or self.node.is_collapsed)\
           and self.line:
             p1, p2 = self.line
             yield draw_line(p1, p2, 'align-link', style=style)
@@ -1688,3 +1708,36 @@ class LegendFace(Face):
                     value,
                     style=text_style)
             ty += entry_h
+
+
+class StackedBarFace(RectFace):
+    """Face to show a series of stacked bars."""
+
+    def __init__(self, width, height, data=None, name='', opacity=0.7,
+                 min_fsize=6, max_fsize=15, ftype='sans-serif',
+                 padding_x=0, padding_y=0, tooltip=None):
+        """Initialize the face.
+
+        :param data: List of tuples, like [(whatever, value, color), ...].
+        """
+        super().__init__(width=width, height=height, name=name, color=None,
+                         min_fsize=min_fsize, max_fsize=max_fsize,
+                         padding_x=padding_x, padding_y=padding_y, tooltip=tooltip)
+        self.data = data
+
+    def __name__(self):
+        return "StackedBarFace"
+
+    def draw(self, drawer):
+        x0, y0, dx0, dy0 = self._box
+
+        total = sum(d[1] for d in self.data)
+        scale_factor = dx0 / (total or 1)  # the "or 1" prevents dividing by 0
+
+        x = x0
+        for _, value, color, *_ in self.data:
+            dx = scale_factor * value
+            box = Box(x, y0, dx, dy0)
+            yield draw_rect(box, self.name, style={'fill': color},
+                            tooltip=self.tooltip)
+            x += dx
