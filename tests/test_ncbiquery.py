@@ -168,7 +168,7 @@ def test_merged_id():
     t2 = ncbi.get_lineage("649756")
     self.assertEqual(t2, [1, 131567, 2, 1783272, 1239, 186801, 3085636, 186803, 207244, 649756])
   
-  def test_ignore_unclassified():
+def test_ignore_unclassified():
     # normal case
     tree = PhyloTree('((9606, 9598), 10090);')
     tree.annotate_ncbi_taxa(taxid_attr='name', ignore_unclassified=False)
